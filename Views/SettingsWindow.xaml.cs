@@ -18,6 +18,12 @@ namespace ClipDropPro.Views
             DataContext = viewModel;
             
             ApplyThemeColors(viewModel.Theme);
+
+            var updateService = App.GetService<IUpdateService>();
+            if (updateService != null)
+            {
+                VersionText.Text = $"Version {updateService.GetCurrentVersion()}";
+            }
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -112,6 +118,49 @@ namespace ClipDropPro.Views
                 SetResource("ShadowOpacity", 0.45d);
                 SetResource("ShadowColor", System.Windows.Media.Colors.Black);
             }
+        }
+
+        private async void CheckForUpdatesSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var updateService = App.GetService<IUpdateService>();
+            if (updateService == null) return;
+
+            var info = await updateService.CheckForUpdateAsync();
+
+            if (info.IsUpdateAvailable)
+            {
+                var result = System.Windows.MessageBox.Show(
+                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Would you like to download it?",
+                    "Update Available",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(info.DownloadUrl))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = info.DownloadUrl,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            else
+            {
+                System.Windows.MessageBox.Show(
+                    $"You are running the latest version (v{updateService.GetCurrentVersion()}).",
+                    "No Updates Available",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+
+        private void GitHubLink_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://github.com/hungry-detective/Totthodhara",
+                UseShellExecute = true
+            });
         }
     }
 }

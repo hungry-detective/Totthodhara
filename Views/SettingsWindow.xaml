@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:conv="clr-namespace:ClipDropPro.Converters"
-        Title="Totthodhara Settings" Height="500" Width="450"
+        Title="Totthodhara Settings" Height="500" Width="520"
         Icon="pack://application:,,,/app.png"
         Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextColor}" 
         WindowStyle="None" AllowsTransparency="False"
@@ -333,6 +333,8 @@
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Privacy"/>
                 <RadioButton Content="Plugins" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Plugins"/>
+                <RadioButton Content="About" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=About}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="About"/>
             </StackPanel>
         </Border>
 
@@ -638,6 +640,74 @@
                             <TextBlock Text="Place plugins in the Plugins folder:" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                             <TextBlock Text="Plugins\CSharp\  -  C# DLL plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="0,4,0,0"/>
                             <TextBlock Text="Plugins\JavaScript\  -  JS file plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+        <!-- About Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
+            <StackPanel>
+                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock x:Name="VersionText" Text="Version 1.0.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Check for updates" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Check if a newer version is available on GitHub" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="Check" Click="CheckForUpdatesSettings_Click" Padding="16,6"
+                                Background="{DynamicResource AccentColor}" Foreground="White" BorderThickness="0"
+                                FontSize="13" FontWeight="SemiBold" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}" MouseLeftButtonUp="GitHubLink_Click" Cursor="Hand">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Source code" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="github.com/hungry-detective/Totthodhara" FontSize="12" Foreground="{DynamicResource AccentColor}"/>
                         </StackPanel>
                     </Grid>
                 </Border>
