@@ -1,0 +1,83 @@
+<Window x:Class="ClipDropPro.WhatsNewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        Title="What's New in Totthodhara" Height="450" Width="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}"
+        Foreground="{DynamicResource TextColor}"
+        WindowStyle="None"
+        ResizeMode="NoResize">
+
+    <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Title Bar -->
+                <RowDefinition Height="*"/>    <!-- Content -->
+                <RowDefinition Height="Auto"/> <!-- Footer -->
+            </Grid.RowDefinitions>
+
+            <!-- Custom Title Bar -->
+            <Grid Grid.Row="0" Background="{DynamicResource ControlBg}" Height="40" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <TextBlock Text="What's New in Totthodhara" VerticalAlignment="Center" Margin="20,0" FontWeight="Bold" FontSize="14"/>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Center" Margin="10,0" Width="30" Height="30" 
+                        Background="Transparent" BorderThickness="0" Click="CloseButton_Click">
+                    <TextBlock Text="✕" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Button>
+            </Grid>
+
+            <!-- Content Area -->
+            <ScrollViewer Grid.Row="1" Margin="20" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Welcome to Totthodhara" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
+                    
+                    <ui:Card Margin="0,0,0,15" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="System Monitor" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Live CPU, Memory, and Network speed meters right on your shelf. Monitor your system at a glance." 
+                                       TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </ui:Card>
+
+                    <ui:Card Margin="0,0,0,15" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="Multi-Paste Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Select multiple clipboard items and paste them all at once in sequence. Perfect for batch workflows." 
+                                       TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </ui:Card>
+
+                    <ui:Card Margin="0,0,0,15" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="Favicons for URLs" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="URL items now show website favicons so you can instantly identify where a link came from." 
+                                       TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </ui:Card>
+
+                    <ui:Card Margin="0,0,0,15" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="Pill-Shaped Items" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Redesigned clipboard items with smooth pill shapes, better animations, and refined hover effects." 
+                                       TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </ui:Card>
+
+                    <ui:Card Margin="0,0,0,15" Padding="15">
+                        <StackPanel>
+                            <TextBlock Text="Auto-Clean by Hours" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <TextBlock Text="Old clips are now cleaned up hourly instead of daily. Keep your shelf tidy without manual effort." 
+                                       TextWrapping="Wrap" Opacity="0.8"/>
+                        </StackPanel>
+                    </ui:Card>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Footer -->
+            <Border Grid.Row="2" Background="{DynamicResource ControlBg}" Padding="20,15">
+                <Button Content="Got it!" Width="120" HorizontalAlignment="Right" Click="CloseButton_Click" 
+                        Background="{DynamicResource AccentColor}" Foreground="White" FontWeight="Bold"/>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
