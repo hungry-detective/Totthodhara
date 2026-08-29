@@ -8,9 +8,9 @@ namespace ClipDropPro.Services
         int AutoCleanHours { get; set; }
         string HotkeyString { get; set; }
         ModifierKeys HotkeyModifiers { get; set; }
-        string Theme { get; set; } // "Light", "Dark", "System"
+        string Theme { get; set; } // "Light", "Dark", "System", "Transparent"
         string BarSize { get; set; } // "Small", "Medium", "Large"
-        string Alignment { get; set; } // "Left", "Centered", "Right"
+        string Alignment { get; set; } // "Left", "Center", "Right"
         string ShelfPosition { get; set; } // "Top", "Bottom"
         bool StartWithWindows { get; set; }
         bool CopyItemsToDestination { get; set; }
@@ -28,6 +28,15 @@ namespace ClipDropPro.Services
         bool ShowNetworkMonitor { get; set; }
         bool ShowCpuRamMonitor { get; set; }
         bool ShowPlugins { get; set; }
+        bool ShowWorldClock { get; set; }
+        string WorldClockTimeZone { get; set; }
+        System.Collections.Generic.List<string> PinnedWorldClockZones { get; set; }
+        bool MonitorsOnLeft { get; set; }
+        bool HardwareOnLeft { get; set; }
+        bool CompactClock { get; set; }
+        bool AutoCheckUpdates { get; set; }
+        bool SilentAutoUpdate { get; set; }
+        bool HideClipboard { get; set; }
         void Save();
     }
 }

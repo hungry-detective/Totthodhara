@@ -58,11 +58,13 @@ The app icon (`app.ico`) must be a perfect square. A non-square PNG renamed to .
 
 ### 1. Floating Capsule Dock Shelf
 - Window has `AllowsTransparency="True"` and `Background="Transparent"` — the desktop shows through behind the capsule
-- Content is wrapped in `CapsuleBorder` (a `<Border>` with `CornerRadius`, `DropShadowEffect`, `Background="{DynamicResource AppBackground}"`) creating a floating pill/dock appearance
+- Content is wrapped in `CapsuleBorder` (a `<Border>` with `CornerRadius`, `Background="{DynamicResource AppBackground}"`, no DropShadowEffect, no border) creating a floating pill/dock appearance
+- Outer wrapper `Border` with `ClipToBounds="True"` surrounds CapsuleBorder as a safety net
 - Registers as Windows **AppBar** (reserves screen space so maximized windows don't overlap)
 - `WindowStyle="None"`, `ShowInTaskbar="False"`, `Topmost="True"`
 - Dynamic corner radius and margin set in `SetAppBarPos()` based on bar size
-- `DropShadowEffect` opacity comes from `ShadowOpacity` DynamicResource (0.2 light / 0.45 dark), color from `ShadowColor` (always Black)
+- **DO NOT** add DropShadowEffect to CapsuleBorder — it extends render bounds below the element into the transparent window, creating a visible gap between the shelf and the taskbar
+- **DO NOT** add BorderThickness to CapsuleBorder — the semi-transparent border line is visible as a gap at the screen edge
 - **DO NOT** change the AppBar registration logic
 - **DO NOT** remove `WS_EX_NOACTIVATE` / `WS_EX_TOOLWINDOW` — prevents focus steal
 
@@ -367,13 +369,13 @@ Also used in SettingsWindow:
 
 ## Known Quirks / DON'T CHANGE UNLESS ASKED
 
-1. **Drag threshold is 2px** — small enough for quick drag response, large enough to prevent accidental triggers
+1. **Drag threshold is 5 pixels** — small enough for quick drag response, large enough to prevent accidental triggers
 2. **SendKeys.SendWait("^v")** for paste — NOT SendInput. SendInput was tried but caused reliability issues with certain apps
 3. **100ms delay** before SendKeys — clipboard must be available before paste simulation
 4. **Original file path** in drag FileDropList (not temp copy) — temp copies caused permission/access issues in target apps like WhatsApp
 5. **DIB format** included alongside FileDrop for image drags — provides preview in image-aware target apps
 6. **Window uses `AllowsTransparency="True"` with `Background="Transparent"`** — the CapsuleBorder inside creates the visual, the transparent window bg lets the desktop show through
-7. **DropShadowEffect opacity controlled by `ShadowOpacity`/`ShadowColor` DynamicResources** — 0.2 for light mode, 0.45 for dark mode
+7. **DropShadowEffect removed from CapsuleBorder** — the shadow extended below the element into the transparent window area, creating a visible gap between the shelf and the taskbar. BorderThickness also set to 0 for the same reason.
 8. **Capsule corner radius and margin set dynamically in `SetAppBarPos()`** based on bar size (Small: r=14, Default: r=18, Large: r=23); horizontal margin = 0 (edge-to-edge), vertical margin = 0 (flush) so rounded corners meet screen edges
 9. **ShutdownMode="OnExplicitShutdown"** — app must stay alive for tray icon even when shelf is hidden
 10. **OnClosing cancels close and hides** — prevents app from closing when user clicks X (they should use tray Exit)
@@ -383,3 +385,7 @@ Also used in SettingsWindow:
 14. **Item Background is `{DynamicResource CardBg}`** — enables per-mode card color. IsMouseOver trigger uses `ControlBg` to override. Light mode: CardBg=#F0F0F0, ControlBg=#666666; Dark mode: CardBg=#333333, ControlBg=#555555
 15. **All `ApplicationThemeManager.Apply()` calls except the single one in App.xaml.cs are removed** — the only Wpf-Ui Apply is `Apply(Light)` as a base theme. All color customization done via UpdateTheme's 12 resource overrides
 16. **Toolbar buttons use clean icon-only style** with `Border CornerRadius="8"` and hover background, replacing old circular Ellipse backgrounds
+17. **CapsuleBorder CornerRadius is per-position** — bottom shelf: `(radius, radius, 0, 0)` (flat bottom flush with taskbar); top shelf: `(0, 0, radius, radius)` (flat top flush with screen edge). Prevents transparent rounded corners from creating visible gap against the taskbar/screen.
+18. **Shelf stacks above taskbar** — `FindWindow("Shell_TrayWnd")` + `GetWindowRect` queries actual taskbar position. Shelf is placed directly above it (for bottom position) instead of at the screen edge.
+19. **Outer wrapper Border with `ClipToBounds="True"`** surrounds CapsuleBorder as a safety net against any visual bleed.
+20. **AppBar position: only WPF Width/Height set after SetWindowPos** — Left/Top NOT set synchronously to prevent WPF re-layout shifting the window by 1-2px due to DPI rounding.

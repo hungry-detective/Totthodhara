@@ -16,6 +16,7 @@ namespace ClipDropPro
     {
         private static IHost _host;
         private static System.Threading.Mutex _mutex = null;
+        private static MainWindow _mainWindowInstance = null;
 
         private void KillOldInstances()
         {
@@ -67,27 +68,42 @@ namespace ClipDropPro
                 Log($"FATAL UNHANDLED EXCEPTION: {e.ExceptionObject}");
             };
 
-            System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (s, e) => {
-                Log($"UNOBSERVED TASK EXCEPTION: {e.Exception}");
-                e.SetObserved();
+            AppDomain.CurrentDomain.ProcessExit += (s, e) => {
+                Log($"ProcessExit triggered. StackTrace:\n{Environment.StackTrace}");
+            };
+
+            this.Exit += (s, e) => {
+                Log($"App.Exit event triggered with code {e.ApplicationExitCode}. StackTrace:\n{Environment.StackTrace}");
             };
         }
 
-        protected override async void OnStartup(StartupEventArgs e)
+        protected override void OnStartup(StartupEventArgs e)
         {
+            base.OnStartup(e);
+
             KillOldInstances();
 
-            const string appName = "Totthodhara-ClipDropPro-Unique-Mutex";
-            bool createdNew;
-
-            _mutex = new System.Threading.Mutex(true, appName, out createdNew);
+            const string appName = "Local\\Totthodhara-ClipDropPro-Unique-Mutex";
+            bool createdNew = false;
+            try
+            {
+                _mutex = new System.Threading.Mutex(true, appName, out createdNew);
+                if (!createdNew)
+                {
+                    System.Threading.Thread.Sleep(300);
+                    _mutex?.Dispose();
+                    _mutex = new System.Threading.Mutex(true, appName, out createdNew);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Mutex warning: {ex.Message}");
+                createdNew = true;
+            }
 
             if (!createdNew)
             {
-                // App is already running!
-                // Since this app has a tray icon and a shelf, we don't need to do much 
-                // but prevent the second instance from starting.
-                System.Windows.MessageBox.Show("Totthodhara is already running.", "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+                Log("Another instance is already active. Exiting.");
                 System.Windows.Application.Current.Shutdown();
                 return;
             }
@@ -109,14 +125,23 @@ namespace ClipDropPro
                     services.AddSingleton<MainViewModel>();
                     services.AddSingleton<SettingsViewModel>();
 
-                    services.AddTransient<MainWindow>();
-                    services.AddTransient<SettingsWindow>();
+                    services.AddSingleton<MainWindow>();
+                    services.AddSingleton<SettingsWindow>();
                 })
                 .Build();
 
             Log("Starting host...");
-            await _host.StartAsync();
+            _host.Start();
             Log("Host started.");
+
+            // --- Update rollback/success ---
+            var updateService = GetService<IUpdateService>();
+            if (updateService.HasPendingUpdate)
+            {
+                // If we got this far, the update likely succeeded
+                updateService.MarkUpdateSucceeded();
+                Log("Pending update verified and backup cleaned.");
+            }
 
             var settingsService = GetService<ISettingsService>();
             Log("Settings service resolved.");
@@ -129,11 +154,48 @@ namespace ClipDropPro
             Log("Theme applied.");
 
             Log("Resolving MainWindow...");
-            var mainWindow = GetService<MainWindow>();
+            _mainWindowInstance = GetService<MainWindow>();
+            this.MainWindow = _mainWindowInstance;
             Log("MainWindow resolved. Showing...");
-            mainWindow.Show();
-            
-            base.OnStartup(e);
+            _mainWindowInstance.Show();
+            Log("MainWindow shown.");
+
+            // --- Auto-check for updates on startup (if enabled) ---
+            if (settingsService.AutoCheckUpdates)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var updateInfo = await updateService.CheckForUpdateAsync();
+                        if (updateInfo.IsUpdateAvailable)
+                        {
+                            Log($"Update available: {updateInfo.LatestVersion}");
+                            if (settingsService.SilentAutoUpdate && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                            {
+                                Log("Silent mode — downloading in background.");
+                                var progress = new Progress<double>();
+                                await updateService.DownloadAndInstallAsync(updateInfo, progress);
+                            }
+                            else
+                            {
+                                _mainWindowInstance.Dispatcher.BeginInvoke(new Action(() =>
+                                {
+                                    _mainWindowInstance.ShowUpdateNotification(updateInfo);
+                                }));
+                            }
+                        }
+                        else
+                        {
+                            Log("No update available on startup check.");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Startup update check failed (non-fatal): {ex.Message}");
+                    }
+                });
+            }
         }
 
         protected override async void OnExit(ExitEventArgs e)

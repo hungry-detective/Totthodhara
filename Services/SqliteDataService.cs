@@ -68,7 +68,9 @@ namespace ClipDropPro.Services
         public async Task DeleteAllExceptPinnedAsync()
         {
             await InitializeAsync();
-            var itemsToDelete = await _db!.Table<ClipboardItem>().Where(x => !x.IsPinned && !x.IsSnippet).ToListAsync();
+            var itemsToDelete = await _db!.Table<ClipboardItem>()
+                .Where(x => (!x.IsPinned && !x.IsSnippet) || x.DisplayTitle == "Welcome to Totthodhara")
+                .ToListAsync();
             foreach (var item in itemsToDelete)
             {
                 await _db.DeleteAsync(item);

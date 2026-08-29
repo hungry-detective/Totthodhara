@@ -106,10 +106,10 @@ namespace ClipDropPro.ViewModels
         private string _debugStatus = "Ready";
 
         [ObservableProperty]
-        private string _barSize = "Medium"; // Small, Medium, Large
+        private string _barSize = "Small"; // Small, Medium, Large
 
         [ObservableProperty]
-        private string _alignment = "Centered"; // Centered, Left, Right
+        private string _alignment = "Center"; // Centered, Left, Right
 
         [ObservableProperty]
         private string _shelfPosition = "Bottom"; // Bottom, Top
@@ -149,6 +149,50 @@ namespace ClipDropPro.ViewModels
 
         [ObservableProperty]
         private bool _showPlugins = true;
+
+        [ObservableProperty]
+        private bool _showWorldClock = true;
+
+        [ObservableProperty]
+        private string _worldClockTimeZone = "US Mountain Standard Time";
+
+        [ObservableProperty]
+        private string _worldClockText = "--:--";
+
+        [ObservableProperty]
+        private string _worldClockToolTip = "";
+
+        [ObservableProperty]
+        private ObservableCollection<WorldClockItem> _pinnedWorldClocks = new();
+
+        [ObservableProperty]
+        private bool _monitorsOnLeft = false;
+
+        [ObservableProperty]
+        private bool _compactClock = false;
+
+        [ObservableProperty]
+        private bool _showNetworkOnLeft = false;
+
+        [ObservableProperty]
+        private bool _showNetworkOnRight = true;
+
+        [ObservableProperty]
+        private bool _hardwareOnLeft = false;
+
+        [ObservableProperty]
+        private bool _showHardwareOnLeft = false;
+
+        [ObservableProperty]
+        private bool _showHardwareOnRight = true;
+
+        [ObservableProperty]
+        private bool _hideClipboard = false;
+
+        public bool ShowLeftMonitors => ShowNetworkOnLeft || ShowHardwareOnLeft;
+
+        private System.Windows.Threading.DispatcherTimer _worldClockTimer;
+        private System.Windows.Threading.DispatcherTimer _rebuildPinnedClocksTimer;
 
         [ObservableProperty]
         private int _cpuUsage = 0;
@@ -200,6 +244,10 @@ namespace ClipDropPro.ViewModels
             // Sync settings to properties
             SyncSettings();
 
+            // Start world clock if enabled
+            if (ShowWorldClock)
+                StartWorldClock();
+
             // Initialize system monitor
             _systemMonitorService.Updated += OnSystemMonitorUpdated;
             ShowSystemMonitor = _settingsService.ShowSystemMonitor;
@@ -229,6 +277,21 @@ namespace ClipDropPro.ViewModels
                     case nameof(SettingsViewModel.ShowCpuRamMonitor):
                         ShowCpuRamMonitor = settingsViewModel.ShowCpuRamMonitor;
                         break;
+                    case nameof(SettingsViewModel.ShowWorldClock):
+                        ShowWorldClock = settingsViewModel.ShowWorldClock;
+                        break;
+                    case nameof(SettingsViewModel.WorldClockTimeZone):
+                        WorldClockTimeZone = settingsViewModel.WorldClockTimeZone;
+                        break;
+                    case nameof(SettingsViewModel.MonitorsOnLeft):
+                        MonitorsOnLeft = settingsViewModel.MonitorsOnLeft;
+                        break;
+                    case nameof(SettingsViewModel.HardwareOnLeft):
+                        HardwareOnLeft = settingsViewModel.HardwareOnLeft;
+                        break;
+                    case nameof(SettingsViewModel.CompactClock):
+                        CompactClock = settingsViewModel.CompactClock;
+                        break;
                 }
             };
 
@@ -245,7 +308,7 @@ namespace ClipDropPro.ViewModels
             {
                 await _dataService.InitializeAsync();
                 Log("DataService initialized.");
-                await LoadItemsAsync();
+                await LoadItemsAsync(showWelcomeIfEmpty: true);
                 Log("LoadItemsAsync completed.");
                 
                 // Background cleanup task
@@ -284,7 +347,7 @@ namespace ClipDropPro.ViewModels
             });
         }
 
-        public async Task LoadItemsAsync(bool forceReload = false)
+        public async Task LoadItemsAsync(bool forceReload = false, bool showWelcomeIfEmpty = false)
         {
             Log("LoadItemsAsync started.");
             int maxItems = Math.Max(_settingsService.MaxHistoryItems, 10);
@@ -299,6 +362,19 @@ namespace ClipDropPro.ViewModels
                          .ToList();
 
             Log($"Found {items.Count} items.");
+
+            if (items.Count == 0 && showWelcomeIfEmpty)
+            {
+                var welcomeItem = new ClipboardItem
+                {
+                    TextContent = "Welcome to Totthodhara! Clipboard items appear here.",
+                    DateAdded = DateTime.Now,
+                    IsPinned = true,
+                    DisplayTitle = "Welcome to Totthodhara"
+                };
+                await _dataService.AddItemAsync(welcomeItem);
+                items.Add(welcomeItem);
+            }
 
             // Mark new items with flash animation
             int? prevTopId = ClipboardItems.Count > 0 ? ClipboardItems[0].Id : null;
@@ -378,77 +454,220 @@ namespace ClipDropPro.ViewModels
             string favDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaFavicons");
             try
             {
-                // Clear old favicon cache to force fresh fetches
-                if (System.IO.Directory.Exists(favDir))
-                    System.IO.Directory.Delete(favDir, true);
-                System.IO.Directory.CreateDirectory(favDir);
+                if (!System.IO.Directory.Exists(favDir))
+                    System.IO.Directory.CreateDirectory(favDir);
             }
             catch { }
 
-            foreach (var item in items.Where(x => x.IsUrl))
+            var urlItems = items.Where(x => x.IsUrl).ToList();
+            if (urlItems.Count == 0) return;
+
+            // Parallel favicon loading with limited concurrency
+            var semaphore = new SemaphoreSlim(4, 4);
+            var tasks = urlItems.Select(async item =>
             {
+                await semaphore.WaitAsync();
                 try
                 {
-                    if (Uri.TryCreate(item.TextContent, UriKind.Absolute, out Uri uriResult))
+                    await ProcessFaviconAsync(item, favDir);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+            await Task.WhenAll(tasks);
+        }
+
+        private async Task ProcessFaviconAsync(ClipboardItem item, string favDir)
+        {
+            try
+            {
+                if (!Uri.TryCreate(item.TextContent, UriKind.Absolute, out Uri uriResult))
+                    return;
+
+                string host = uriResult.Host.ToLower();
+                string safeName = System.Text.RegularExpressions.Regex.Replace(host, "[^a-zA-Z0-9]", "_");
+                string cachedFile = System.IO.Path.Combine(favDir, $"{safeName}.ico");
+                string cachedPngFile = System.IO.Path.Combine(favDir, $"{safeName}.png");
+
+                // Use cached favicon if it exists and is recent (within 7 days)
+                if (System.IO.File.Exists(cachedFile))
+                {
+                    var info = new System.IO.FileInfo(cachedFile);
+                    if (info.LastWriteTime > DateTime.Now.AddDays(-7) && info.Length > 10)
                     {
-                        byte[] bytes = null;
-                        string host = uriResult.Host.ToLower();
-                        string fullUrl = item.TextContent.ToLower();
+                        await LoadFaviconFromCacheAsync(item, cachedFile);
+                        return;
+                    }
+                }
+                if (System.IO.File.Exists(cachedPngFile))
+                {
+                    var info = new System.IO.FileInfo(cachedPngFile);
+                    if (info.LastWriteTime > DateTime.Now.AddDays(-7) && info.Length > 10)
+                    {
+                        await LoadFaviconFromCacheAsync(item, cachedPngFile);
+                        return;
+                    }
+                }
 
-                        // Special handling for known services with specific icons
-                        string knownIconUrl = GetKnownFaviconUrl(host, fullUrl);
-                        if (knownIconUrl != null)
+                string fullUrl = item.TextContent.ToLower();
+                byte[] bytes = null;
+                string ext = "ico";
+
+                // 1) Try HTML page parsing first — most reliable, gets the actual favicon URL
+                try
+                {
+                    string html = await _httpClient.GetStringAsync(item.TextContent);
+                    bytes = ExtractFaviconFromHtml(html, uriResult, out ext);
+                }
+                catch { }
+
+                // 2) Special handling for known services with specific icons
+                if (bytes == null || bytes.Length <= 10)
+                {
+                    string knownIconUrl = GetKnownFaviconUrl(host, fullUrl);
+                    if (knownIconUrl != null)
+                    {
+                        try
                         {
-                            try { bytes = await _httpClient.GetByteArrayAsync(knownIconUrl); } catch { }
+                            bytes = await _httpClient.GetByteArrayAsync(knownIconUrl);
+                            ext = "png";
                         }
+                        catch { }
+                    }
+                }
 
-                        // Fallback: Google S2 favicon service
-                        if (bytes == null || bytes.Length <= 1)
-                        {
-                            try
-                            {
-                                bytes = await _httpClient.GetByteArrayAsync($"https://www.google.com/s2/favicons?domain={uriResult.Host}&sz=32");
-                            }
-                            catch { }
-                        }
+                // 3) Fallback: Google S2 favicon service
+                if (bytes == null || bytes.Length <= 10)
+                {
+                    try
+                    {
+                        bytes = await _httpClient.GetByteArrayAsync($"https://www.google.com/s2/favicons?domain={uriResult.Host}&sz=32");
+                        ext = "png";
+                    }
+                    catch { }
+                }
 
-                        // Fallback: try direct favicon.ico from the domain
-                        if (bytes == null || bytes.Length <= 1)
-                        {
-                            try
-                            {
-                                bytes = await _httpClient.GetByteArrayAsync($"{uriResult.Scheme}://{uriResult.Host}/favicon.ico");
-                            }
-                            catch { }
-                        }
+                // 4) Fallback: try direct favicon.ico from the domain
+                if (bytes == null || bytes.Length <= 10)
+                {
+                    try
+                    {
+                        bytes = await _httpClient.GetByteArrayAsync($"{uriResult.Scheme}://{uriResult.Host}/favicon.ico");
+                        ext = "ico";
+                    }
+                    catch { }
+                }
 
-                        if (bytes != null && bytes.Length > 1)
+                // 5) Fallback: try /apple-touch-icon.png (many sites have this)
+                if (bytes == null || bytes.Length <= 10)
+                {
+                    try
+                    {
+                        bytes = await _httpClient.GetByteArrayAsync($"{uriResult.Scheme}://{uriResult.Host}/apple-touch-icon.png");
+                        ext = "png";
+                    }
+                    catch { }
+                }
+
+                if (bytes != null && bytes.Length > 10)
+                {
+                    string outFile = ext == "png" ? cachedPngFile : cachedFile;
+                    await System.IO.File.WriteAllBytesAsync(outFile, bytes);
+                    await LoadFaviconFromCacheAsync(item, outFile);
+                    Log($"Favicon loaded for {host}: {bytes.Length} bytes ({ext})");
+                }
+                else
+                {
+                    Log($"Favicon not found for {host}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Favicon error {item.Id}: {ex.Message}");
+            }
+        }
+
+        private byte[] ExtractFaviconFromHtml(string html, Uri baseUri, out string ext)
+        {
+            ext = "ico";
+            try
+            {
+                // Find <link rel="icon" ...> or <link rel="shortcut icon" ...> tags
+                var matches = System.Text.RegularExpressions.Regex.Matches(
+                    html,
+                    @"<link[^>]+rel\s*=\s*[""']?(?:shortcut\s+)?icon[""']?[^>]*>",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+                string bestUrl = null;
+                int bestSize = 0;
+
+                foreach (System.Text.RegularExpressions.Match m in matches)
+                {
+                    string tag = m.Value;
+
+                    // Extract href
+                    var hrefMatch = System.Text.RegularExpressions.Regex.Match(
+                        tag, @"href\s*=\s*[""']([^""']+)[""']",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (!hrefMatch.Success) continue;
+
+                    string href = hrefMatch.Groups[1].Value;
+                    if (string.IsNullOrWhiteSpace(href) || href.StartsWith("data:")) continue;
+
+                    // Resolve relative URLs
+                    Uri resolved;
+                    if (Uri.TryCreate(baseUri, href, out resolved))
+                    {
+                        // Prefer larger sizes if sizes attribute is present
+                        var sizeMatch = System.Text.RegularExpressions.Regex.Match(
+                            tag, @"sizes\s*=\s*[""']?(\d+)x(\d+)[""']?",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        int size = 0;
+                        if (sizeMatch.Success)
+                            int.TryParse(sizeMatch.Groups[1].Value, out size);
+
+                        if (size >= bestSize)
                         {
-                            string safeName = System.Text.RegularExpressions.Regex.Replace(host, "[^a-zA-Z0-9]", "_");
-                            string tempFile = System.IO.Path.Combine(favDir, $"{safeName}.png");
-                            await System.IO.File.WriteAllBytesAsync(tempFile, bytes);
-                            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
-                            {
-                                try
-                                {
-                                    var bitmap = new BitmapImage();
-                                    bitmap.BeginInit();
-                                    bitmap.UriSource = new Uri(tempFile);
-                                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                                    bitmap.EndInit();
-                                    bitmap.Freeze();
-                                    item.IconSource = bitmap;
-                                }
-                                catch { }
-                            }, System.Windows.Threading.DispatcherPriority.Normal);
+                            bestSize = size;
+                            bestUrl = resolved.ToString();
+                            // Detect extension
+                            var path = resolved.AbsolutePath.ToLower();
+                            if (path.EndsWith(".png")) ext = "png";
+                            else if (path.EndsWith(".svg")) ext = "svg";
+                            else if (path.EndsWith(".jpg") || path.EndsWith(".jpeg")) ext = "jpg";
+                            else if (path.EndsWith(".gif")) ext = "gif";
+                            else ext = "ico";
                         }
                     }
                 }
-                catch (Exception ex)
+
+                if (bestUrl != null)
                 {
-                    Log($"Favicon error {item.Id}: {ex.Message}");
+                    return _httpClient.GetByteArrayAsync(bestUrl).GetAwaiter().GetResult();
                 }
             }
+            catch { }
+            return null;
+        }
+
+        private async Task LoadFaviconFromCacheAsync(ClipboardItem item, string filePath)
+        {
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(filePath);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    item.IconSource = bitmap;
+                }
+                catch { }
+            }, System.Windows.Threading.DispatcherPriority.Normal);
         }
 
         private string GetKnownFaviconUrl(string host, string fullUrl)
@@ -613,6 +832,28 @@ namespace ClipDropPro.ViewModels
             ShowNetworkMonitor = _settingsService.ShowNetworkMonitor;
             ShowCpuRamMonitor = _settingsService.ShowCpuRamMonitor;
             ShowPlugins = _settingsService.ShowPlugins;
+            ShowWorldClock = _settingsService.ShowWorldClock;
+            WorldClockTimeZone = _settingsService.WorldClockTimeZone;
+            MonitorsOnLeft = _settingsService.MonitorsOnLeft;
+            HardwareOnLeft = _settingsService.HardwareOnLeft;
+            CompactClock = _settingsService.CompactClock;
+            HideClipboard = _settingsService.HideClipboard;
+            UpdateNetworkVisibility();
+            UpdateHardwareVisibility();
+        }
+
+        private void UpdateNetworkVisibility()
+        {
+            ShowNetworkOnLeft = ShowNetworkMonitor && MonitorsOnLeft && ShowSystemMonitor;
+            ShowNetworkOnRight = ShowNetworkMonitor && !MonitorsOnLeft && ShowSystemMonitor;
+            OnPropertyChanged(nameof(ShowLeftMonitors));
+        }
+
+        private void UpdateHardwareVisibility()
+        {
+            ShowHardwareOnLeft = ShowCpuRamMonitor && HardwareOnLeft && ShowSystemMonitor;
+            ShowHardwareOnRight = ShowCpuRamMonitor && !HardwareOnLeft && ShowSystemMonitor;
+            OnPropertyChanged(nameof(ShowLeftMonitors));
         }
 
         private void OnSystemMonitorUpdated()
@@ -639,11 +880,232 @@ namespace ClipDropPro.ViewModels
                 _systemMonitorService.Start();
             else
                 _systemMonitorService.Stop();
+            UpdateNetworkVisibility();
+            UpdateHardwareVisibility();
         }
 
         partial void OnShowPluginsChanged(bool value)
         {
             _settingsService.ShowPlugins = value;
+        }
+
+        partial void OnShowNetworkMonitorChanged(bool value)
+        {
+            _settingsService.ShowNetworkMonitor = value;
+            UpdateNetworkVisibility();
+        }
+
+        partial void OnHardwareOnLeftChanged(bool value)
+        {
+            _settingsService.HardwareOnLeft = value;
+            UpdateHardwareVisibility();
+        }
+
+        partial void OnShowCpuRamMonitorChanged(bool value)
+        {
+            _settingsService.ShowCpuRamMonitor = value;
+            UpdateHardwareVisibility();
+        }
+
+        partial void OnShowWorldClockChanged(bool value)
+        {
+            _settingsService.ShowWorldClock = value;
+            if (value) StartWorldClock(); else StopWorldClock();
+        }
+
+        partial void OnWorldClockTimeZoneChanged(string value)
+        {
+            _settingsService.WorldClockTimeZone = value;
+            UpdateWorldClock();
+        }
+
+        partial void OnMonitorsOnLeftChanged(bool value)
+        {
+            _settingsService.MonitorsOnLeft = value;
+            UpdateNetworkVisibility();
+        }
+
+        partial void OnCompactClockChanged(bool value)
+        {
+            _settingsService.CompactClock = value;
+            UpdateWorldClocks();
+            UpdateWorldClock();
+        }
+
+        private void StartWorldClock()
+        {
+            StopWorldClock();
+            RebuildPinnedWorldClocks();
+            UpdateWorldClocks();
+            // Legacy single
+            UpdateWorldClock();
+            _worldClockTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1)
+            };
+            _worldClockTimer.Tick += (s, e) => { UpdateWorldClocks(); UpdateWorldClock(); };
+            _worldClockTimer.Start();
+        }
+
+        private void StopWorldClock()
+        {
+            if (_worldClockTimer != null)
+            {
+                _worldClockTimer.Stop();
+                _worldClockTimer = null;
+            }
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<string, string> _zoneShortNames = new()
+        {
+            ["Bangladesh Standard Time"] = "BDT",
+            ["US Mountain Standard Time"] = "MST",
+            ["India Standard Time"] = "IST",
+            ["Arabian Standard Time"] = "GST",
+            ["GMT Standard Time"] = "GMT",
+            ["Eastern Standard Time"] = "EST",
+            ["Pacific Standard Time"] = "PST",
+            ["Central Standard Time"] = "CST",
+            ["UTC"] = "UTC",
+        };
+
+        private static readonly System.Collections.Generic.Dictionary<string, string> _zoneDisplayNames = new()
+        {
+            ["Bangladesh Standard Time"] = "BD",
+            ["US Mountain Standard Time"] = "AZ",
+            ["India Standard Time"] = "IN",
+            ["Arabian Standard Time"] = "AE",
+            ["GMT Standard Time"] = "UK",
+            ["Eastern Standard Time"] = "New York",
+            ["Pacific Standard Time"] = "Los Angeles",
+            ["Central Standard Time"] = "Chicago",
+            ["UTC"] = "UTC",
+        };
+
+        private void SchedulePinnedClocksRebuild()
+        {
+            if (_rebuildPinnedClocksTimer == null)
+            {
+                _rebuildPinnedClocksTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(200)
+                };
+                _rebuildPinnedClocksTimer.Tick += (s, e) =>
+                {
+                    _rebuildPinnedClocksTimer.Stop();
+                    RebuildPinnedWorldClocksNow();
+                };
+            }
+            _rebuildPinnedClocksTimer.Stop();
+            _rebuildPinnedClocksTimer.Start();
+        }
+
+        public void RebuildPinnedWorldClocks()
+        {
+            SchedulePinnedClocksRebuild();
+        }
+
+        private void RebuildPinnedWorldClocksNow()
+        {
+            try
+            {
+                var zones = _settingsService.PinnedWorldClockZones;
+                // Only show clocks when there are actually pinned zones
+                if (zones == null || zones.Count == 0)
+                {
+                    // No pinned zones - clear the collection
+                    PinnedWorldClocks.Clear();
+                    UpdateWorldClocks();
+                    return;
+                }
+
+                // Preserve order, keep pinned on top in shelf (left to right)
+                var currentIds = PinnedWorldClocks.Select(w => w.ZoneId).ToList();
+                if (currentIds.SequenceEqual(zones)) { UpdateWorldClocks(); return; }
+
+                // Use a temporary list to avoid collection modification during enumeration
+                var newItems = new List<WorldClockItem>();
+                foreach (var zid in zones)
+                {
+                    string display = _zoneDisplayNames.TryGetValue(zid, out var dn) ? dn : zid.Substring(0, Math.Min(3, zid.Length)).ToUpper();
+                    string shortN = _zoneShortNames.TryGetValue(zid, out var sn) ? sn : display;
+                    newItems.Add(new WorldClockItem { ZoneId = zid, DisplayName = display, ShortName = shortN });
+                }
+
+                // Replace collection atomically to avoid UI binding issues
+                var oldItems = PinnedWorldClocks.ToList();
+                PinnedWorldClocks.Clear();
+                foreach (var item in newItems)
+                    PinnedWorldClocks.Add(item);
+                
+                UpdateWorldClocks();
+            }
+            catch (Exception ex) { Log($"RebuildPinnedWorldClocks error: {ex.Message}"); }
+        }
+
+        private void UpdateWorldClocks()
+        {
+            try
+            {
+                // Rebuild if settings changed externally (pin added/removed)
+                var settingsZones = _settingsService.PinnedWorldClockZones ?? new();
+                if (PinnedWorldClocks.Count != settingsZones.Count || !PinnedWorldClocks.Select(w => w.ZoneId).SequenceEqual(settingsZones))
+                {
+                    RebuildPinnedWorldClocks();
+                    return;
+                }
+
+                var utc = DateTime.UtcNow;
+                foreach (var item in PinnedWorldClocks)
+                {
+                    try
+                    {
+                        TimeZoneInfo tz;
+                        string zid = item.ZoneId;
+                        if (zid == "Local") tz = TimeZoneInfo.Local;
+                        else
+                        {
+                            try { tz = TimeZoneInfo.FindSystemTimeZoneById(zid); }
+                            catch { tz = TimeZoneInfo.Local; zid = tz.Id; }
+                        }
+                        var local = TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+                        // Always show time with AM/PM, no duplicate zone after time — BD/AZ shown in separate label next to clock icon
+                        item.Text = $"{local:hh:mm tt}";
+                        item.ToolTip = $"{tz.DisplayName}\n{local:dddd, MMMM dd, yyyy hh:mm:ss tt} ({item.DisplayName})";
+                    }
+                    catch { item.Text = "--:--"; }
+                }
+            }
+            catch { }
+        }
+
+        private void UpdateWorldClock()
+        {
+            try
+            {
+                TimeZoneInfo tz;
+                string zoneId = WorldClockTimeZone;
+                if (string.IsNullOrEmpty(zoneId) || zoneId == "Local")
+                {
+                    tz = TimeZoneInfo.Local;
+                    zoneId = TimeZoneInfo.Local.Id;
+                }
+                else
+                {
+                    try { tz = TimeZoneInfo.FindSystemTimeZoneById(zoneId); }
+                    catch { tz = TimeZoneInfo.Local; zoneId = tz.Id; }
+                }
+
+                var utc = DateTime.UtcNow;
+                var local = TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+                WorldClockText = $"{local:hh:mm tt}";
+                WorldClockToolTip = $"{tz.DisplayName}\n{local:dddd, MMMM dd, yyyy hh:mm:ss tt}";
+            }
+            catch (Exception ex)
+            {
+                WorldClockText = "--:--";
+                WorldClockToolTip = $"Error: {ex.Message}";
+            }
         }
 
         partial void OnBarSizeChanged(string value)
@@ -895,6 +1357,50 @@ namespace ClipDropPro.ViewModels
             catch (Exception ex)
             {
                 Log($"Error in ClearAllItems: {ex.Message}");
+            }
+            finally
+            {
+                // FIX: Reset clipboard dedup / guard state after clearing.
+                // Without this, copying same file/text as before clear was incorrectly
+                // treated as duplicate, and stale search filter hid new items.
+                _lastCapturedContent = string.Empty;
+                _lastCaptureTime = DateTime.MinValue;
+                _lastInternalChangeTime = DateTime.MinValue;
+                _clipboardGuard = 0;
+                // Clear active search filter so new items are visible
+                try
+                {
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        SearchText = string.Empty;
+                        IsSearchActive = false;
+                    });
+                }
+                catch { }
+
+                // Ensure storage folder still exists
+                try
+                {
+                    var storageDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "Storage");
+                    if (!System.IO.Directory.Exists(storageDir))
+                        System.IO.Directory.CreateDirectory(storageDir);
+                }
+                catch { }
+
+                // Re-register clipboard listener (clears any lost handle after heavy file I/O)
+                try
+                {
+                    await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        if (System.Windows.Application.Current.MainWindow is ClipDropPro.MainWindow mw)
+                            mw.EnsureClipboardListener();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log($"Failed to re-register clipboard listener after clear: {ex.Message}");
+                }
+                Log("ClearAllItems: clipboard state reset, listener re-registered");
             }
         }
 
@@ -1232,6 +1738,7 @@ namespace ClipDropPro.ViewModels
             }
             try
             {
+                if (HideClipboard) return;
                 if (IsInternalChange) return;
 
                 for (int retry = 0; retry < 5; retry++)
@@ -1367,5 +1874,14 @@ namespace ClipDropPro.ViewModels
             }
         }
         private static void Log(string msg) => Services.Logger.Write($"[VM] {msg}");
+    }
+
+    public partial class WorldClockItem : ObservableObject
+    {
+        public string ZoneId { get; set; } = "";
+        public string DisplayName { get; set; } = "";
+        public string ShortName { get; set; } = "";
+        [ObservableProperty] private string _text = "--:--";
+        [ObservableProperty] private string _toolTip = "";
     }
 }

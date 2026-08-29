@@ -1,3 +1,5 @@
+using System.Threading;
+
 namespace ClipDropPro.Services
 {
     public class UpdateInfo
@@ -6,11 +8,16 @@ namespace ClipDropPro.Services
         public string DownloadUrl { get; set; } = "";
         public string ReleaseNotes { get; set; } = "";
         public bool IsUpdateAvailable { get; set; }
+        public string ExpectedSha256 { get; set; } = "";
     }
 
     public interface IUpdateService
     {
         Task<UpdateInfo> CheckForUpdateAsync();
         string GetCurrentVersion();
+        Task<bool> DownloadAndInstallAsync(UpdateInfo info, IProgress<double> progress = null, CancellationToken cancellationToken = default);
+        bool HasPendingUpdate { get; }
+        void MarkUpdateSucceeded();
+        void RollbackIfFailed();
     }
 }

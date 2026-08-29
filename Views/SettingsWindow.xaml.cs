@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using ClipDropPro.Services;
@@ -130,18 +131,14 @@ namespace ClipDropPro.Views
             if (info.IsUpdateAvailable)
             {
                 var result = System.Windows.MessageBox.Show(
-                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Would you like to download it?",
+                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Download and install now? The app will restart automatically.",
                     "Update Available",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(info.DownloadUrl))
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = info.DownloadUrl,
-                        UseShellExecute = true
-                    });
+                    await RunUpdateWithProgressAsync(updateService, info);
                 }
             }
             else
@@ -151,6 +148,91 @@ namespace ClipDropPro.Views
                     "No Updates Available",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunUpdateWithProgressAsync(IUpdateService updateService, UpdateInfo info)
+        {
+            var progressBar = new System.Windows.Controls.ProgressBar
+            {
+                Minimum = 0, Maximum = 100, Height = 14, Margin = new Thickness(16, 8, 16, 0),
+                IsIndeterminate = false
+            };
+            var statusText = new System.Windows.Controls.TextBlock
+            {
+                Text = "Downloading 0%...", Margin = new Thickness(16, 8, 16, 0),
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
+                FontSize = 12
+            };
+            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(0, 16, 0, 16) };
+            panel.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = $"Downloading v{info.LatestVersion}...",
+                FontWeight = FontWeights.SemiBold, Margin = new Thickness(16, 0, 16, 0),
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
+                FontSize = 13
+            });
+            panel.Children.Add(statusText);
+            panel.Children.Add(progressBar);
+
+            var win = new System.Windows.Window
+            {
+                Title = "Updating Totthodhara",
+                Width = 420, Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.ToolWindow,
+                Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["WindowBg"] ?? System.Windows.Media.Brushes.White,
+                Content = panel
+            };
+
+            var progress = new System.Progress<double>(pct =>
+            {
+                progressBar.Value = pct;
+                statusText.Text = pct >= 100 ? "Download complete. Preparing update..." : $"Downloading {pct:F0}%...";
+            });
+
+            win.Show();
+            await System.Threading.Tasks.Task.Delay(200);
+
+            bool ok = false;
+            try
+            {
+                ok = await updateService.DownloadAndInstallAsync(info, progress);
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"[SettingsWindow] Update error: {ex}");
+            }
+
+            win.Close();
+
+            if (ok)
+            {
+                System.Windows.MessageBox.Show(
+                    "Update downloaded successfully. The app will now restart to apply the update.",
+                    "Update Ready", MessageBoxButton.OK, MessageBoxImage.Information);
+                System.Windows.Application.Current.Shutdown();
+            }
+            else
+            {
+                var fallback = System.Windows.MessageBox.Show(
+                    "Automatic update failed. Would you like to open the download page in your browser instead?",
+                    "Update Failed", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (fallback == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = info.DownloadUrl,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch { }
+                }
             }
         }
 

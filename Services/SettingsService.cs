@@ -12,8 +12,8 @@ namespace ClipDropPro.Services
         public string HotkeyString { get; set; } = "OemTilde";
         public ModifierKeys HotkeyModifiers { get; set; } = ModifierKeys.Control;
         public string Theme { get; set; } = "System";
-        public string BarSize { get; set; } = "Medium";
-        public string Alignment { get; set; } = "Centered";
+        public string BarSize { get; set; } = "Small";
+        public string Alignment { get; set; } = "Center";
         public string ShelfPosition { get; set; } = "Bottom";
         public bool StartWithWindows { get; set; } = false;
         public bool CopyItemsToDestination { get; set; } = true;
@@ -31,6 +31,15 @@ namespace ClipDropPro.Services
         public bool ShowNetworkMonitor { get; set; } = true;
         public bool ShowCpuRamMonitor { get; set; } = true;
         public bool ShowPlugins { get; set; } = true;
+        public bool ShowWorldClock { get; set; } = false;
+        public string WorldClockTimeZone { get; set; } = "US Mountain Standard Time";
+        public System.Collections.Generic.List<string> PinnedWorldClockZones { get; set; } = new() { "Bangladesh Standard Time", "US Mountain Standard Time" };
+        public bool MonitorsOnLeft { get; set; } = false;
+        public bool HardwareOnLeft { get; set; } = true;
+        public bool CompactClock { get; set; } = false;
+        public bool AutoCheckUpdates { get; set; } = false;
+        public bool SilentAutoUpdate { get; set; } = false;
+        public bool HideClipboard { get; set; } = false;
     }
 
     public class SettingsService : ISettingsService
@@ -58,7 +67,16 @@ namespace ClipDropPro.Services
                     var json = File.ReadAllText(_settingsFilePath);
                     _settings = JsonSerializer.Deserialize<Settings>(json) ?? new Settings();
                     if (_settings.BarSize == "Default")
-                        _settings.BarSize = "Medium";
+                        _settings.BarSize = "Small";
+                    // Migrate old single zone to pinned list
+                    if (_settings.PinnedWorldClockZones == null || _settings.PinnedWorldClockZones.Count == 0)
+                    {
+                        if (!string.IsNullOrEmpty(_settings.WorldClockTimeZone))
+                            _settings.PinnedWorldClockZones = new() { _settings.WorldClockTimeZone };
+                        else
+                            _settings.PinnedWorldClockZones = new() { "Bangladesh Standard Time", "US Mountain Standard Time" };
+                    }
+                    // Ensure at least BD+AZ are discoverable (don't force, just keep user's pins)
                 }
                 catch
                 {
@@ -219,6 +237,60 @@ namespace ClipDropPro.Services
         {
             get => _settings.ShowPlugins;
             set { _settings.ShowPlugins = value; Save(); }
+        }
+
+        public bool ShowWorldClock
+        {
+            get => _settings.ShowWorldClock;
+            set { _settings.ShowWorldClock = value; Save(); }
+        }
+
+        public string WorldClockTimeZone
+        {
+            get => _settings.WorldClockTimeZone;
+            set { _settings.WorldClockTimeZone = value; Save(); }
+        }
+
+        public System.Collections.Generic.List<string> PinnedWorldClockZones
+        {
+            get => _settings.PinnedWorldClockZones;
+            set { _settings.PinnedWorldClockZones = value; Save(); }
+        }
+
+        public bool MonitorsOnLeft
+        {
+            get => _settings.MonitorsOnLeft;
+            set { _settings.MonitorsOnLeft = value; Save(); }
+        }
+
+        public bool HardwareOnLeft
+        {
+            get => _settings.HardwareOnLeft;
+            set { _settings.HardwareOnLeft = value; Save(); }
+        }
+
+        public bool CompactClock
+        {
+            get => _settings.CompactClock;
+            set { _settings.CompactClock = value; Save(); }
+        }
+
+        public bool AutoCheckUpdates
+        {
+            get => _settings.AutoCheckUpdates;
+            set { _settings.AutoCheckUpdates = value; Save(); }
+        }
+
+        public bool SilentAutoUpdate
+        {
+            get => _settings.SilentAutoUpdate;
+            set { _settings.SilentAutoUpdate = value; Save(); }
+        }
+
+        public bool HideClipboard
+        {
+            get => _settings.HideClipboard;
+            set { _settings.HideClipboard = value; Save(); }
         }
     }
 }

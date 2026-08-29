@@ -52,7 +52,7 @@ namespace ClipDropPro
 
             // System monitor sizes scale with bar size
             double sysIconSize = Math.Max(10, fontSize + 4);
-            double sysTextSize = Math.Max(10, fontSize + 2);
+            double sysTextSize = Math.Max(9, fontSize);
             Resources["SysMonitorIconSize"] = sysIconSize;
             Resources["SysMonitorTextSize"] = sysTextSize;
             Resources["SysMonitorCanvasSize"] = sysIconSize + 2;
@@ -77,7 +77,6 @@ namespace ClipDropPro
 
 
 
-            Loaded += MainWindow_Loaded;
             _viewModel.PropertyChanged += ViewModel_PropertyChanged;
             if (_viewModel.SettingsViewModel != null)
             {
@@ -86,54 +85,93 @@ namespace ClipDropPro
             
             // Initial theme application
             UpdateTheme();
+        }
 
-            // Setup Tray Icon from embedded app.png (Enlarged & Cropped)
+        private void SetupTrayIcon()
+        {
             try
             {
-                var resourceStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/app.png"));
-                if (resourceStream != null)
+                if (TrayIcon == null) return;
+
+                System.Drawing.Icon? created = CreateTrayIconFromPng();
+                if (created == null)
+                    created = CreateTrayIconFromIco();
+
+                if (created == null)
                 {
-                    using (var stream = resourceStream.Stream)
-                    using (var originalBitmap = new System.Drawing.Bitmap(stream))
+                    Log("Tray icon setup failed: no valid icon resource.");
+                    return;
+                }
+
+                _keepTrayIconAlive?.Dispose();
+                _keepTrayIconAlive = created;
+                TrayIcon.Icon = _keepTrayIconAlive;
+                TrayIcon.Visibility = Visibility.Visible;
+                TrayIcon.ForceCreate();
+                Log("Tray icon initialized successfully.");
+            }
+            catch (Exception ex)
+            {
+                Log($"Tray icon setup error: {ex.Message}");
+            }
+        }
+
+        private static System.Drawing.Icon? CreateTrayIconFromPng()
+        {
+            try
+            {
+                var pngStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/app.png"));
+                if (pngStream == null) return null;
+
+                using (pngStream.Stream)
+                using (var sourceBmp = new System.Drawing.Bitmap(pngStream.Stream))
+                {
+                    var window = System.Windows.Application.Current?.MainWindow as MainWindow;
+                    using var cropped = window != null
+                        ? window.CropImageTransparency(sourceBmp)
+                        : new System.Drawing.Bitmap(sourceBmp);
+                    using var resized = new System.Drawing.Bitmap(cropped, 32, 32);
+                    IntPtr hIcon = resized.GetHicon();
+                    try
                     {
-                        // Auto-crop transparency to make the icon fill the space better
-                        using (var cropped = CropImageTransparency(originalBitmap))
-                        {
-                            // Calculate aspect ratio to prevent stretching
-                            float scale = Math.Min(32f / cropped.Width, 32f / cropped.Height);
-                            int newWidth = Math.Max(1, (int)(cropped.Width * scale));
-                            int newHeight = Math.Max(1, (int)(cropped.Height * scale));
-                            int posX = (32 - newWidth) / 2;
-                            int posY = (32 - newHeight) / 2;
-
-                            using (var resizedBitmap = new System.Drawing.Bitmap(32, 32))
-                            using (var g = System.Drawing.Graphics.FromImage(resizedBitmap))
-                            {
-                                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                                
-                                g.DrawImage(cropped, posX, posY, newWidth, newHeight);
-                                
-                                IntPtr hIcon = resizedBitmap.GetHicon();
-                                _keepTrayIconAlive = System.Drawing.Icon.FromHandle(hIcon);
-                                TrayIcon.Icon = _keepTrayIconAlive;
-
-                                // Also set the Window (Taskbar) icon to match
-                                try
-                                {
-                                    IntPtr hBitmap = resizedBitmap.GetHbitmap();
-                                    this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
-                                        hBitmap, IntPtr.Zero, Int32Rect.Empty, 
-                                        System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-                                }
-                                catch { }
-                            }
-                        }
+                        using var tmp = System.Drawing.Icon.FromHandle(hIcon);
+                        return (System.Drawing.Icon)tmp.Clone();
+                    }
+                    finally
+                    {
+                        DestroyIcon(hIcon);
                     }
                 }
             }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static System.Drawing.Icon? CreateTrayIconFromIco()
+        {
+            try
+            {
+                var icoStream = System.Windows.Application.GetResourceStream(new Uri("pack://application:,,,/app.ico"));
+                if (icoStream != null)
+                {
+                    using var ms = new MemoryStream();
+                    icoStream.Stream.CopyTo(ms);
+                    ms.Position = 0;
+                    using var tmp = new System.Drawing.Icon(ms);
+                    return (System.Drawing.Icon)tmp.Clone();
+                }
+
+                string localIcoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                if (File.Exists(localIcoPath))
+                {
+                    using var tmp = new System.Drawing.Icon(localIcoPath);
+                    return (System.Drawing.Icon)tmp.Clone();
+                }
+            }
             catch { }
+            return null;
         }
 
         private System.Drawing.Bitmap CropImageTransparency(System.Drawing.Bitmap source)
@@ -166,6 +204,17 @@ namespace ClipDropPro
                     break;
                 case nameof(SettingsViewModel.AlwaysOnTop):
                     Topmost = _viewModel.SettingsViewModel.AlwaysOnTop;
+                    break;
+                case nameof(SettingsViewModel.HideClipboard):
+                    _viewModel.HideClipboard = _viewModel.SettingsViewModel.HideClipboard;
+                    if (_viewModel.HideClipboard)
+                    {
+                        CloseSearch();
+                        if (_viewModel.IsMultiPasteMode)
+                            _viewModel.IsMultiPasteMode = false;
+                    }
+                    UpdateLayoutForHideClipboard();
+                    SetAppBarPos();
                     break;
             }
         }
@@ -225,8 +274,11 @@ namespace ClipDropPro
         [DllImport("user32.dll", SetLastError = true)]
         static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [DllImport("user32.dll")]
         static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
         [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageA", CharSet = CharSet.Ansi)]
         static extern int RegisterWindowMessage(string lpString);
@@ -258,6 +310,10 @@ namespace ClipDropPro
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+        const uint SPI_GETWORKAREA = 0x0030;
+        [DllImport("user32.dll")]
+        static extern bool SystemParametersInfo(uint uAction, uint uParam, ref RECT lpvParam, uint fwWinIni);
 
         private int uCallbackMessage;
         private bool fIsAppBarRegistered = false;
@@ -306,6 +362,16 @@ namespace ClipDropPro
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int SW_SHOWNOACTIVATE = 4;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool DestroyIcon(IntPtr hIcon);
+
+        [DllImport("user32.dll")]
+        static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        [DllImport("user32.dll", EntryPoint = "ShowWindow")]
+        static extern bool NativeShowWindow(IntPtr hWnd, int nCmdShow);
 
         private void DisableNoActivate()
         {
@@ -389,39 +455,71 @@ namespace ClipDropPro
         {
             Log("SetAppBarPos started");
 
-            // Calculate window height in DIP
-            double baseHeight = DesiredHeight;
-            double capsuleRadius = 18;
-            double capsuleMarginV = 0;
+            double baseHeight;
+            double capsuleRadius;
+            double capsuleMarginV;
             switch (_viewModel.BarSize)
             {
-                case "Small": baseHeight = 32; capsuleRadius = 10; capsuleMarginV = 0; SetItemSizes(14, 2, 3, 2, 11, 24); break;
-                case "Large": baseHeight = 52; capsuleRadius = 18; capsuleMarginV = 0; SetItemSizes(28, 6, 8, 2, 16, 40); break;
-                case "Medium": baseHeight = 40; capsuleRadius = 14; capsuleMarginV = 0; SetItemSizes(22, 4, 6, 2, 14, 34); break;
+                case "Small": baseHeight = 32; capsuleRadius = 16; capsuleMarginV = 0; SetItemSizes(16, 2, 4, 2, 12, 28); break;
+                case "Large": baseHeight = 50; capsuleRadius = 25; capsuleMarginV = 0; SetItemSizes(28, 5, 7, 2, 15, 38); break;
+                case "Medium":
+                default: baseHeight = 40; capsuleRadius = 20; capsuleMarginV = 0; SetItemSizes(22, 3, 5, 2, 14, 34); break;
             }
+
             Height = baseHeight;
             if (CapsuleBorder != null)
             {
-                CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(capsuleRadius);
+                bool shelfTop = _viewModel.ShelfPosition == "Top";
+                if (shelfTop)
+                    CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(0, 0, capsuleRadius, capsuleRadius);
+                else
+                    CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(capsuleRadius, capsuleRadius, 0, 0);
                 CapsuleBorder.Margin = new System.Windows.Thickness(0, capsuleMarginV, 0, capsuleMarginV);
             }
 
             var presentationSource = PresentationSource.FromVisual(this);
             double dpiFactor = presentationSource?.CompositionTarget.TransformToDevice.M22 ?? 1.0;
-            int heightPx = (int)(Height * dpiFactor);
-            int screenWidthPx = (int)(SystemParameters.PrimaryScreenWidth * dpiFactor);
-            int screenHeightPx = (int)(SystemParameters.PrimaryScreenHeight * dpiFactor);
+            int heightPx = (int)Math.Round(baseHeight * dpiFactor);
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO monitorInfo = new MONITORINFO();
+            monitorInfo.cbSize = Marshal.SizeOf(monitorInfo);
+            int screenWidthPx, screenHeightPx;
+            if (!GetMonitorInfo(monitor, ref monitorInfo))
+            {
+                screenWidthPx = (int)(SystemParameters.PrimaryScreenWidth * dpiFactor);
+                screenHeightPx = (int)(SystemParameters.PrimaryScreenHeight * dpiFactor);
+            }
+            else
+            {
+                screenWidthPx = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
+                screenHeightPx = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
+            }
 
             bool isTop = _viewModel.ShelfPosition == "Top";
 
-            // Step 1: Set up the APPBARDATA and call ABM_QUERYPOS then ABM_SETPOS
-            // against the actual screen edge (not work area) so Windows knows we're docking there.
+            // Query the actual taskbar position so we stack above/below it correctly
+            int taskbarEdgePx = -1;
+            if (!isTop)
+            {
+                // Find taskbar window
+                IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
+                if (taskbarHwnd != IntPtr.Zero)
+                {
+                    RECT taskbarRect;
+                    if (GetWindowRect(taskbarHwnd, out taskbarRect))
+                    {
+                        taskbarEdgePx = taskbarRect.top;
+                        Log($"Taskbar rect: T={taskbarRect.top}, B={taskbarRect.bottom}, height={taskbarRect.bottom - taskbarRect.top}");
+                    }
+                }
+            }
+
             APPBARDATA abd = new APPBARDATA();
             abd.cbSize = Marshal.SizeOf(typeof(APPBARDATA));
-            abd.hWnd = new WindowInteropHelper(this).Handle;
+            abd.hWnd = hwnd;
             abd.uEdge = isTop ? (int)ABEdge.ABE_TOP : (int)ABEdge.ABE_BOTTOM;
-
-            // Propose the full-width strip at the screen edge
             abd.rc.left = 0;
             abd.rc.right = screenWidthPx;
             if (isTop)
@@ -431,39 +529,56 @@ namespace ClipDropPro
             }
             else
             {
-                abd.rc.bottom = screenHeightPx;
-                abd.rc.top = screenHeightPx - heightPx;
+                // Stack above the taskbar instead of at the screen edge
+                if (taskbarEdgePx > 0)
+                {
+                    abd.rc.bottom = taskbarEdgePx;
+                    abd.rc.top = taskbarEdgePx - heightPx;
+                }
+                else
+                {
+                    abd.rc.bottom = screenHeightPx;
+                    abd.rc.top = screenHeightPx - heightPx;
+                }
             }
 
-            // Let OS negotiate position (moves reserve around other appbars)
             SHAppBarMessage((int)ABMsg.ABM_QUERYPOS, ref abd);
 
-            // Enforce our preferred edge size (don't let ABM_QUERYPOS shrink us)
-            if (isTop)
+            // ABM_QUERYPOS adjusts our rect to avoid the taskbar and other AppBars.
+            // Only enforce the HEIGHT — let Windows handle the Y position.
+            int queriedHeight = abd.rc.bottom - abd.rc.top;
+            if (queriedHeight < heightPx)
             {
-                abd.rc.bottom = abd.rc.top + heightPx;
-            }
-            else
-            {
-                abd.rc.top = abd.rc.bottom - heightPx;
+                // ABM_QUERYPOS shrunk us — enforce our minimum height from the edge it gave us
+                if (isTop)
+                    abd.rc.bottom = abd.rc.top + heightPx;
+                else
+                    abd.rc.top = abd.rc.bottom - heightPx;
             }
 
             SHAppBarMessage((int)ABMsg.ABM_SETPOS, ref abd);
             Log($"AppBar Rect after SETPOS: L={abd.rc.left}, T={abd.rc.top}, R={abd.rc.right}, B={abd.rc.bottom}");
 
-            // Step 2: Position WPF window exactly at the AppBar-reserved rect
+            // Log the actual work area Windows reserved
+            RECT workArea = new RECT();
+            SystemParametersInfo(SPI_GETWORKAREA, 0, ref workArea, 0);
+            Log($"Work area after SETPOS: L={workArea.left}, T={workArea.top}, R={workArea.right}, B={workArea.bottom}, height={workArea.bottom - workArea.top}");
+
             int xPx = abd.rc.left;
             int wPx = abd.rc.right - abd.rc.left;
             int hPx = abd.rc.bottom - abd.rc.top;
             int yPx = abd.rc.top;
 
-            var hwnd = new WindowInteropHelper(this).Handle;
             uint flags = SWP_NOACTIVATE | (_isForcedHiddenByFullScreen ? 0u : SWP_SHOWWINDOW);
             SetWindowPos(hwnd, HWND_TOPMOST, xPx, yPx, wPx, hPx, flags);
 
-            Left = xPx / dpiFactor;
-            Top = yPx / dpiFactor;
+            // Verify actual window rect after SetWindowPos
+            RECT actualRect;
+            GetWindowRect(hwnd, out actualRect);
+            Log($"SetWindowPos requested: x={xPx}, y={yPx}, w={wPx}, h={hPx} | actual: L={actualRect.left}, T={actualRect.top}, R={actualRect.right}, B={actualRect.bottom}");
+
             Width = wPx / dpiFactor;
+            Height = hPx / dpiFactor;
             Log($"Window placed: x={xPx}, y={yPx}, w={wPx}, h={hPx}");
         }
         #endregion
@@ -498,7 +613,6 @@ namespace ClipDropPro
             _fullScreenCheckTimer = new System.Windows.Threading.DispatcherTimer();
             _fullScreenCheckTimer.Interval = TimeSpan.FromMilliseconds(100);
             _fullScreenCheckTimer.Tick += FullScreenCheckTimer_Tick;
-            // _fullScreenCheckTimer.Start(); // Disabled for debugging
             _fullScreenCheckTimer.Start();
         }
 
@@ -631,47 +745,35 @@ namespace ClipDropPro
                     int winW = foregroundRect.right - foregroundRect.left;
                     int winH = foregroundRect.bottom - foregroundRect.top;
 
-                    // Check if foreground window covers the screen
-                    bool isFullScreen = (foregroundRect.left <= monitorInfo.rcMonitor.left + 1 &&
-                                         foregroundRect.top <= monitorInfo.rcMonitor.top + 1 &&
-                                         foregroundRect.right >= monitorInfo.rcMonitor.right - 1 &&
-                                         foregroundRect.bottom >= monitorInfo.rcMonitor.bottom - 1);
+                    int style = GetWindowLong(foregroundWindow, -16); // GWL_STYLE
+                    bool hasCaption = (style & 0x00C00000) == 0x00C00000; // WS_CAPTION = WS_BORDER | WS_DLGFRAME
 
-                    // Also detect fullscreen via window style (no caption, no thick frame)
-                    // Catches VLC and other media players that use exclusive fullscreen mode
-                    if (!isFullScreen)
+                    // True fullscreen apps (games, video players, F11 browser) do NOT have WS_CAPTION.
+                    // Standard maximized desktop apps with titlebars/tabs must NOT hide the shelf.
+                    bool isFullScreen = !hasCaption && (
+                        (foregroundRect.left <= monitorInfo.rcMonitor.left + 1 &&
+                         foregroundRect.top <= monitorInfo.rcMonitor.top + 1 &&
+                         foregroundRect.right >= monitorInfo.rcMonitor.right - 1 &&
+                         foregroundRect.bottom >= monitorInfo.rcMonitor.bottom - 1)
+                        ||
+                        (winW >= monW * 0.95 && winH >= monH * 0.95)
+                    );
+                    
+                    // Also check for browser fullscreen (Chrome/Edge/Firefox fullscreen videos)
+                    // These often have no caption but might have thick frame
+                    if (!isFullScreen && !hasCaption)
                     {
-                        int style = GetWindowLong(foregroundWindow, -16); // GWL_STYLE
-                        bool hasCaption = (style & 0x00C00000) != 0; // WS_CAPTION
-                        bool hasThickFrame = (style & 0x00040000) != 0; // WS_THICKFRAME
-                        // Window covers > 95% of screen and has no window chrome = likely fullscreen
-                        isFullScreen = !hasCaption && !hasThickFrame &&
-                                       winW >= monW * 0.95 && winH >= monH * 0.95;
+                        // Check if window covers almost entire monitor (98% coverage)
+                        isFullScreen = (winW >= monW * 0.98 && winH >= monH * 0.98);
                     }
 
                     if (isFullScreen)
                     {
-                        if (foregroundWindow != _lastFullScreenWindow)
-                        {
-                            // New full-screen window — start the timer delay
-                            _lastFullScreenWindow = foregroundWindow;
-                            _lastFullScreenProcessId = 0;
-                            _lastFullScreenTime = DateTime.UtcNow;
-                            GetWindowThreadProcessId(foregroundWindow, out _lastFullScreenProcessId);
-                            // Don't hide yet — wait to confirm it's not a brief overlay
-                            return;
-                        }
-
-                        // Same full-screen window still active — only hide after 1.5s
-                        if (!_isForcedHiddenByFullScreen &&
-                            (DateTime.UtcNow - _lastFullScreenTime).TotalSeconds < 1.5)
-                        {
-                            return;
-                        }
-
                         if (!_isForcedHiddenByFullScreen)
                         {
                             _isForcedHiddenByFullScreen = true;
+                            _lastFullScreenWindow = foregroundWindow;
+                            GetWindowThreadProcessId(foregroundWindow, out _lastFullScreenProcessId);
                             Visibility = Visibility.Collapsed;
                             UnregisterAppBar();
                         }
@@ -690,8 +792,8 @@ namespace ClipDropPro
                             {
                                 // Same app — check if it actually exited fullscreen
                                 // (has both caption AND thick frame, or is <50% screen width)
-                                int style = GetWindowLong(foregroundWindow, -16);
-                                bool hasCaption = (style & 0x00C00000) != 0;
+                                style = GetWindowLong(foregroundWindow, -16);
+                                hasCaption = (style & 0x00C00000) != 0;
                                 bool hasThickFrame = (style & 0x00040000) != 0;
                                 bool isWindowed = (hasCaption && hasThickFrame) || winW < monW * 0.5;
                                 if (isWindowed)
@@ -758,19 +860,9 @@ namespace ClipDropPro
                 switch (notify)
                 {
                     case (int)ABNotify.ABN_FULLSCREENAPP:
-                        if (lparam.ToInt32() != 0)
-                        {
-                            _isForcedHiddenByFullScreen = true;
-                            var fullWnd = GetForegroundWindow();
-                            _lastFullScreenWindow = fullWnd;
-                            GetWindowThreadProcessId(fullWnd, out _lastFullScreenProcessId);
-                            _lastFullScreenTime = DateTime.UtcNow;
-                            // Must unregister AppBar so mouse proximity to screen edge
-                            // doesn't re-activate the window
-                            Visibility = Visibility.Collapsed;
-                            UnregisterAppBar();
-                        }
-                        // Don't show on exit — let the timer handle it
+                        // Fullscreen detection is handled by the FullScreenCheckTimer (when enabled).
+                        // Handling ABN_FULLSCREENAPP directly here caused the shelf to collapse on
+                        // startup because AppBar registration itself triggers this notification.
                         handled = true;
                         break;
 
@@ -801,6 +893,9 @@ namespace ClipDropPro
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Setup Tray Icon now that window HWND exists
+            SetupTrayIcon();
+
             // Show the shelf immediately on launch
             _viewModel.IsShelfVisible = true;
             ShowWindow();
@@ -832,6 +927,9 @@ namespace ClipDropPro
                     ke.Handled = true;
                 }
             };
+
+            // Apply HideClipboard layout on startup if enabled
+            UpdateLayoutForHideClipboard();
 
             // Load plugins
             LoadPlugins();
@@ -907,10 +1005,118 @@ namespace ClipDropPro
                 Dispatcher.Invoke(UpdateSearchButtonVisibilityForStatus);
                 return;
             }
+            if (_viewModel.HideClipboard)
+            {
+                SearchToggleButton.Visibility = System.Windows.Visibility.Collapsed;
+                if (StatusToastPopup != null) StatusToastPopup.IsOpen = false;
+                return;
+            }
             if (_searchBoxBorder != null) return;
             var status = _viewModel.DebugStatus;
             bool active = !string.IsNullOrEmpty(status) && status != "Ready";
             SearchToggleButton.Visibility = active ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+
+            // Show/hide status toast popup with animation
+            if (StatusToastPopup != null && StatusToastBorder != null)
+            {
+                StatusToastPopup.PlacementTarget = null;
+                if (active)
+                {
+                    StatusToastPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+                    StatusToastPopup.IsOpen = true;
+                    // Defer centering so ActualWidth is available after first layout
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        double shelfCenter = ActualWidth / 2.0;
+                        StatusToastPopup.HorizontalOffset = shelfCenter - StatusToastBorder.ActualWidth / 2.0;
+                    }, System.Windows.Threading.DispatcherPriority.Loaded);
+                    AnimateToastIn();
+                }
+                else
+                {
+                    AnimateToastOut(() => StatusToastPopup.IsOpen = false);
+                }
+            }
+        }
+
+        private void UpdateLayoutForHideClipboard()
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(UpdateLayoutForHideClipboard);
+                return;
+            }
+
+            bool hidden = _viewModel.HideClipboard;
+
+            if (hidden)
+            {
+                // Collapse the * column so grid sizes to content
+                if (ItemsColumn != null) ItemsColumn.Width = new GridLength(0);
+                // Move left monitors into col 3 (between collapsed items cols and right items)
+                if (LeftMonitorsPanel != null) System.Windows.Controls.Grid.SetColumn(LeftMonitorsPanel, 3);
+                // Center the grid — with all Auto cols and no *, it sizes to content and centers
+                ShelfGrid.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+            }
+            else
+            {
+                // Restore * column
+                if (ItemsColumn != null) ItemsColumn.Width = new GridLength(1, GridUnitType.Star);
+                // Restore left monitors to col 0
+                if (LeftMonitorsPanel != null) System.Windows.Controls.Grid.SetColumn(LeftMonitorsPanel, 0);
+                // Stretch grid back
+                ShelfGrid.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+            }
+        }
+
+        private void AnimateToastIn()
+        {
+            var tg = StatusToastBorder.RenderTransform as System.Windows.Media.TransformGroup;
+            if (tg == null) return;
+            var scale = tg.Children[0] as System.Windows.Media.ScaleTransform;
+            var translate = tg.Children[1] as System.Windows.Media.TranslateTransform;
+
+            var scaleX = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(250))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var scaleY = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(250))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var slideY = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(250))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
+            var opacity = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(200));
+
+            StatusToastBorder.Opacity = 0;
+            StatusToastBorder.BeginAnimation(OpacityProperty, opacity);
+            if (scale != null) { scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleX); scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleY); }
+            if (translate != null) translate.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideY);
+        }
+
+        private void AnimateToastOut(Action onComplete)
+        {
+            var tg = StatusToastBorder.RenderTransform as System.Windows.Media.TransformGroup;
+            if (tg == null) { onComplete?.Invoke(); return; }
+            var scale = tg.Children[0] as System.Windows.Media.ScaleTransform;
+            var translate = tg.Children[1] as System.Windows.Media.TranslateTransform;
+
+            var scaleX = new System.Windows.Media.Animation.DoubleAnimation(0.8, TimeSpan.FromMilliseconds(180))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+            var scaleY = new System.Windows.Media.Animation.DoubleAnimation(0.8, TimeSpan.FromMilliseconds(180))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+            var slideY = new System.Windows.Media.Animation.DoubleAnimation(10, TimeSpan.FromMilliseconds(180))
+            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
+            var opacity = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(150));
+
+            StatusToastBorder.BeginAnimation(OpacityProperty, opacity);
+            if (scale != null) { scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleX); scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleY); }
+            if (translate != null)
+            {
+                var anim = slideY;
+                anim.Completed += (s, e) => onComplete?.Invoke();
+                translate.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, anim);
+            }
+            else
+            {
+                onComplete?.Invoke();
+            }
         }
 
         private void UpdateTheme()
@@ -918,51 +1124,6 @@ namespace ClipDropPro
             if (_viewModel?.SettingsViewModel == null) return;
 
             var theme = _viewModel.SettingsViewModel.Theme;
-            bool isLightTheme = theme == "Light";
-            if (theme == "System")
-            {
-                var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
-                isLightTheme = registryValue != null && (int)registryValue == 1;
-            }
-
-            // Solid colors — no acrylic/blur in either mode
-            var shelfBrush = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
-                : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14));
-
-            if (RootGrid != null)
-                RootGrid.Background = System.Windows.Media.Brushes.Transparent;
-
-            var textColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
-            var iconColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
-
-            // CardBg: semi-transparent overlay (glass-morphism surface)
-            // Light: black 10% over white shelf → subtle elevation
-            // Dark:  white 7% over dark shelf → subtle elevation
-            var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromArgb(0x1A, 0x00, 0x00, 0x00)
-                : System.Windows.Media.Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF));
-            // ControlBg (hover): more opaque overlay for distinction
-            System.Windows.Media.Color hoverColor = isLightTheme
-                ? System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00)
-                : System.Windows.Media.Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF);
-            var controlBg = new System.Windows.Media.SolidColorBrush(hoverColor);
-
-            var borderColor = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromArgb(30, 0, 0, 0)
-                : System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
-            var menuBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromRgb(0xFA, 0xFA, 0xFA)
-                : System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x1E));
-            var tooltipBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromArgb(245, 250, 250, 250)
-                : System.Windows.Media.Color.FromArgb(245, 30, 30, 30));
-            var accentColor = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)
-                : System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF));
-            var accentColorDim = new System.Windows.Media.SolidColorBrush(isLightTheme
-                ? System.Windows.Media.Color.FromArgb(0x40, 0x00, 0x78, 0xD4)
-                : System.Windows.Media.Color.FromArgb(0x40, 0x60, 0xCD, 0xFF));
 
             void SetResource(string key, object value)
             {
@@ -970,18 +1131,82 @@ namespace ClipDropPro
                 this.Resources[key] = value;
             }
 
-            SetResource("AppBackground", shelfBrush);
-            SetResource("TextColor", textColor);
-            SetResource("IconColor", iconColor);
-            SetResource("CardBg", cardBg);
-            SetResource("ControlBg", controlBg);
-            SetResource("BorderColor", borderColor);
-            SetResource("MenuBg", menuBg);
-            SetResource("ToolTipBg", tooltipBg);
-            SetResource("AccentColor", accentColor);
-            SetResource("AccentColorDim", accentColorDim);
-            SetResource("ShadowOpacity", isLightTheme ? 0.2d : 0.45d);
-            SetResource("ShadowColor", System.Windows.Media.Colors.Black);
+            if (RootGrid != null)
+                RootGrid.Background = System.Windows.Media.Brushes.Transparent;
+
+            // ── Transparent Mode ──────────────────────────────────────────────
+            if (theme == "Transparent")
+            {
+                SetResource("AppBackground", System.Windows.Media.Brushes.Transparent);
+                SetResource("TextColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
+                SetResource("IconColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
+                SetResource("CardBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)));
+                SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)));
+                SetResource("BorderColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)));
+                SetResource("AccentColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF)));
+                SetResource("AccentColorDim", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF)));
+                SetResource("MenuBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x18, 0x18, 0x18)));
+                SetResource("ToolTipBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x10, 0x10, 0x10)));
+                SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x00, 0x00, 0x00, 0x00)));
+                SetResource("ShadowOpacity", 0.0d);   // No shadow — bar is invisible
+                SetResource("ShadowColor", System.Windows.Media.Colors.Black);
+            }
+            else
+            {
+                // ── Light / Dark / System ─────────────────────────────────────
+                bool isLightTheme = theme == "Light";
+                if (theme == "System")
+                {
+                    var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
+                    isLightTheme = registryValue != null && (int)registryValue == 1;
+                }
+
+                // Solid colors — no acrylic/blur in either mode
+                var shelfBrush = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
+                    : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14));
+
+                var textColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
+                var iconColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
+
+                var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(0x1A, 0x00, 0x00, 0x00)
+                    : System.Windows.Media.Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF));
+                var controlBg = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00)
+                    : System.Windows.Media.Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF));
+                var borderColor = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(30, 0, 0, 0)
+                    : System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
+                var menuBg = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromRgb(0xFA, 0xFA, 0xFA)
+                    : System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x1E));
+                var tooltipBg = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(245, 250, 250, 250)
+                    : System.Windows.Media.Color.FromArgb(245, 30, 30, 30));
+                var accentColor = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)
+                    : System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF));
+                var accentColorDim = new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromArgb(0x40, 0x00, 0x78, 0xD4)
+                    : System.Windows.Media.Color.FromArgb(0x40, 0x60, 0xCD, 0xFF));
+
+                SetResource("AppBackground", shelfBrush);
+                SetResource("TextColor", textColor);
+                SetResource("IconColor", iconColor);
+                SetResource("CardBg", cardBg);
+                SetResource("ControlBg", controlBg);
+                SetResource("BorderColor", borderColor);
+                SetResource("MenuBg", menuBg);
+                SetResource("ToolTipBg", tooltipBg);
+                SetResource("AccentColor", accentColor);
+                SetResource("AccentColorDim", accentColorDim);
+                SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(isLightTheme
+                    ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
+                    : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14)));
+                SetResource("ShadowOpacity", isLightTheme ? 0.2d : 0.45d);
+                SetResource("ShadowColor", System.Windows.Media.Colors.Black);
+            }
 
             if (ItemsHost != null)
             {
@@ -1038,7 +1263,7 @@ namespace ClipDropPro
                 var bgColor = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomWindowBgColor);
                 var shelfBrush = new System.Windows.Media.SolidColorBrush(bgColor);
                 if (RootGrid != null)
-                    RootGrid.Background = shelfBrush;
+                    RootGrid.Background = System.Windows.Media.Brushes.Transparent;
 
                 void SetResource(string key, object value)
                 {
@@ -1063,31 +1288,42 @@ namespace ClipDropPro
 
         private void ShowWindow()
         {
-            Show();
-            // We don't activate to avoid stealing focus, especially with WS_EX_NOACTIVATE
-            // RegisterAppBar will handle the position and space reservation
+            Log("ShowWindow invoked");
+            // Use Visibility instead of Show()/Hide() to keep the HWND alive.
+            // Show() recreates the HWND but the AppBar and clipboard listener are
+            // registered against the original HWND from OnSourceInitialized.
+            Visibility = Visibility.Visible;
             RegisterAppBar();
+            SetAppBarPos();
         }
 
         private void HideWindow()
         {
+            Log("HideWindow invoked");
             UnregisterAppBar();
-            Hide();
+            // Use Collapsed rather than Hide() — Hide() destroys the Win32 HWND,
+            // breaking the AppBar registration and clipboard listener on re-show.
+            Visibility = Visibility.Collapsed;
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
+            Log("CloseButton_Click invoked");
             _viewModel.IsShelfVisible = false;
         }
 
         protected override void OnClosing(CancelEventArgs e)
         {
-            Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
-            this.Activated -= OnWindowActivated;
-            UnregisterAppBar();
-            // Just hide the window instead of closing to stay in system tray
+            Log("OnClosing invoked — cancelling and hiding");
+            // Just cancel the close and hide the shelf instead
             e.Cancel = true;
             _viewModel.IsShelfVisible = false;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            Log($"OnClosed invoked. StackTrace:\n{Environment.StackTrace}");
+            base.OnClosed(e);
         }
 
         private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs e)
@@ -1103,7 +1339,7 @@ namespace ClipDropPro
             EnsureClipboardListener();
         }
 
-        private void EnsureClipboardListener()
+        public void EnsureClipboardListener()
         {
             try
             {
@@ -1487,7 +1723,7 @@ namespace ClipDropPro
                 Vector diff = _dragStartPoint - mousePos;
                 Log($"PreviewMouseMove: diff={diff.Length:F1} start={_dragStartPoint} pos={mousePos}");
 
-                if (Math.Abs(diff.X) > 2 || Math.Abs(diff.Y) > 2)
+                if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
                 {
                     _isPotentialClick = false;
                     if (sender is FrameworkElement element && element.DataContext is ClipboardItem item)
@@ -1511,9 +1747,11 @@ namespace ClipDropPro
                             {
                                 // Check if dropped back on shelf — if so, cancel deletion
                                 var pt = Win32GetCursorPos();
+                                var presentationSource = PresentationSource.FromVisual(this);
+                                double dpiFactor = presentationSource?.CompositionTarget.TransformToDevice.M22 ?? 1.0;
                                 var shelfRect = new System.Drawing.Rectangle(
-                                    (int)this.Left, (int)this.Top,
-                                    (int)Math.Max(this.ActualWidth, 1), (int)Math.Max(this.ActualHeight, 1));
+                                    (int)(this.Left * dpiFactor), (int)(this.Top * dpiFactor),
+                                    (int)Math.Max(this.ActualWidth * dpiFactor, 1), (int)Math.Max(this.ActualHeight * dpiFactor, 1));
                                 if (!shelfRect.Contains(new System.Drawing.Point((int)pt.X, (int)pt.Y)))
                                     _ = _viewModel.DeleteItemCommand.ExecuteAsync(item);
                             }
@@ -1826,18 +2064,14 @@ namespace ClipDropPro
             if (info.IsUpdateAvailable)
             {
                 var result = System.Windows.MessageBox.Show(
-                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Would you like to download it?",
+                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Download and install now? The app will restart automatically.",
                     "Update Available",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
 
                 if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(info.DownloadUrl))
                 {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = info.DownloadUrl,
-                        UseShellExecute = true
-                    });
+                    await RunUpdateWithProgressAsync(updateService, info);
                 }
             }
             else
@@ -1847,6 +2081,117 @@ namespace ClipDropPro
                     "No Updates Available",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
+            }
+        }
+
+        private async Task RunUpdateWithProgressAsync(ClipDropPro.Services.IUpdateService updateService, ClipDropPro.Services.UpdateInfo info)
+        {
+            // Build a minimal progress window (no XAML file needed)
+            var progressBar = new System.Windows.Controls.ProgressBar
+            {
+                Minimum = 0, Maximum = 100, Height = 14, Margin = new Thickness(16, 8, 16, 0),
+                IsIndeterminate = false
+            };
+            var statusText = new System.Windows.Controls.TextBlock
+            {
+                Text = "Downloading 0%...", Margin = new Thickness(16, 8, 16, 0),
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
+                FontSize = 12
+            };
+            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(0, 16, 0, 16) };
+            panel.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = $"Downloading v{info.LatestVersion}...",
+                FontWeight = FontWeights.SemiBold, Margin = new Thickness(16, 0, 16, 0),
+                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
+                FontSize = 13
+            });
+            panel.Children.Add(statusText);
+            panel.Children.Add(progressBar);
+
+            var win = new System.Windows.Window
+            {
+                Title = "Updating Totthodhara",
+                Width = 420, Height = 150,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.ToolWindow,
+                Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["WindowBg"] ?? System.Windows.Media.Brushes.White,
+                Content = panel
+            };
+
+            var progress = new Progress<double>(pct =>
+            {
+                progressBar.Value = pct;
+                statusText.Text = pct >= 100 ? "Download complete. Preparing update..." : $"Downloading {pct:F0}%...";
+            });
+
+            win.Show();
+            // Ensure UI renders
+            await Task.Delay(200);
+
+            bool ok = false;
+            try
+            {
+                ok = await updateService.DownloadAndInstallAsync(info, progress);
+            }
+            catch (Exception ex)
+            {
+                ClipDropPro.Services.Logger.Write($"[MainWindow] Update error: {ex}");
+            }
+
+            win.Close();
+
+            if (ok)
+            {
+                System.Windows.MessageBox.Show(
+                    "Update downloaded successfully. The app will now restart to apply the update.",
+                    "Update Ready", MessageBoxButton.OK, MessageBoxImage.Information);
+                try { TrayIcon?.Dispose(); } catch { }
+                System.Windows.Application.Current.Shutdown();
+            }
+            else
+            {
+                var fallback = System.Windows.MessageBox.Show(
+                    "Automatic update failed. Would you like to open the download page in your browser instead?",
+                    "Update Failed", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (fallback == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = info.DownloadUrl,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        internal void ShowUpdateNotification(ClipDropPro.Services.UpdateInfo updateInfo)
+        {
+            try
+            {
+                var result = System.Windows.MessageBox.Show(
+                    $"A new version v{updateInfo.LatestVersion} is available!\n\nCurrent version: v{App.GetService<ClipDropPro.Services.IUpdateService>()?.GetCurrentVersion() ?? "?"}\n\n{(string.IsNullOrEmpty(updateInfo.ReleaseNotes) ? "" : $"Release notes:\n{updateInfo.ReleaseNotes}\n\n")}Download and install now?",
+                    "Update Available",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+
+                if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                {
+                    var updateService = App.GetService<ClipDropPro.Services.IUpdateService>();
+                    if (updateService != null)
+                        _ = RunUpdateWithProgressAsync(updateService, updateInfo);
+                }
+            }
+            catch (Exception ex)
+            {
+                ClipDropPro.Services.Logger.Write($"[MainWindow] ShowUpdateNotification error: {ex.Message}");
             }
         }
 
@@ -1860,8 +2205,24 @@ namespace ClipDropPro
                 }
                 else
                 {
+                    // Window has WS_EX_NOACTIVATE which prevents activation on click.
+                    // ContextMenu can't show on a non-activated window — user has to click
+                    // multiple times. Temporarily remove the flag so the window activates,
+                    // then restore on close.
+                    DisableNoActivate();
+                    SetForegroundWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
                     this.Activate();
                     this.Focus();
+
+                    System.Windows.Controls.Primitives.Popup popup = null;
+                    System.Windows.RoutedEventHandler closedHandler = null;
+                    closedHandler = (s2, e2) =>
+                    {
+                        MoreButton.ContextMenu.Closed -= closedHandler;
+                        EnableNoActivate();
+                    };
+                    MoreButton.ContextMenu.Closed += closedHandler;
+
                     MoreButton.ContextMenu.PlacementTarget = MoreButton;
                     MoreButton.ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
                     MoreButton.ContextMenu.IsOpen = true;
@@ -1890,6 +2251,7 @@ namespace ClipDropPro
 
         private void SearchToggleButton_Click(object sender, RoutedEventArgs e)
         {
+            if (_viewModel.HideClipboard) return;
             // Prevent stale click-to-paste from previous item
             _isPotentialClick = false;
             _clickedItem = null;
@@ -1958,18 +2320,29 @@ namespace ClipDropPro
                 parentGrid.Children.Add(border);
                 // Remove WS_EX_NOACTIVATE so keyboard input reaches the TextBox
                 DisableNoActivate();
-                // Bring window to foreground so it receives keyboard input
-                SetForegroundWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
-                // Focus after a short delay to ensure visual tree is ready
-                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
-                    new System.Action(() =>
+                try
+                {
+                    // Bring window to foreground so it receives keyboard input
+                    SetForegroundWindow(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+                    // Focus after a short delay to ensure visual tree is ready
+                    System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                        new System.Action(() =>
+                        {
+                            tb.Focus();
+                            System.Windows.Input.Keyboard.Focus(tb);
+                        }),
+                        System.Windows.Threading.DispatcherPriority.Input);
+                    _searchBoxBorder = border;
+                    _searchTextBox = tb;
+                }
+                finally
+                {
+                    // If focus failed, re-enable NOACTIVATE
+                    if (_searchTextBox == null || !_searchTextBox.IsFocused)
                     {
-                        tb.Focus();
-                        System.Windows.Input.Keyboard.Focus(tb);
-                    }),
-                    System.Windows.Threading.DispatcherPriority.Input);
-                _searchBoxBorder = border;
-                _searchTextBox = tb;
+                        EnableNoActivate();
+                    }
+                }
             }
         }
 
@@ -2028,6 +2401,7 @@ namespace ClipDropPro
 
         private async void OpenUrl_Click(object sender, RoutedEventArgs e)
         {
+            e.Handled = true;
             if (sender is FrameworkElement element && element.DataContext is ClipboardItem item && !string.IsNullOrEmpty(item.TextContent))
             {
                 try
@@ -2042,6 +2416,11 @@ namespace ClipDropPro
                 }
                 catch { }
             }
+        }
+
+        private void OpenUrl_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            e.Handled = true;
         }
         #endregion
     }

@@ -9,7 +9,7 @@
         Title="Totthodhara" Height="40" Width="800"
         x:Name="RootWindow"
         Icon="app.png"
-        WindowStyle="None" AllowsTransparency="False" Background="{DynamicResource AppBackground}"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         BorderThickness="0" BorderBrush="Transparent"
         Topmost="True"
         ResizeMode="NoResize"
@@ -17,7 +17,6 @@
         PreviewMouseDown="Window_PreviewMouseDown" PreviewMouseUp="Window_PreviewMouseUp" ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         Loaded="MainWindow_Loaded"
-        Deactivated="MainWindow_Deactivated"
         TextOptions.TextFormattingMode="Display"
         RenderOptions.ClearTypeHint="Enabled"
         UseLayoutRounding="True">
@@ -35,8 +34,12 @@
         <sys:Double x:Key="ToolBarIconSize">14</sys:Double>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <conv:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
+        <conv:BooleanToHiddenConverter x:Key="BoolToHidden" />
+        <conv:BoolToStarConverter x:Key="BoolToStar" />
+        <conv:LeftMonitorsColumnConverter x:Key="LeftMonitorsColumnConverter" />
         <conv:FileToSymbolConverter x:Key="FileToSymbolConverter" />
         <conv:DebugStatusToVisibilityConverter x:Key="DebugStatusToVisibilityConverter" />
+        <conv:DebugStatusToBoolConverter x:Key="DebugStatusToBoolConverter" />
         <!-- SearchToggleButton visibility managed in code-behind via UpdateSearchButtonVisibilityForStatus() -->
         <conv:CountToVisibilityConverter x:Key="CountToVisibilityConverter" />
         <conv:PinnedToColorConverter x:Key="PinnedToColorConverter" />
@@ -50,7 +53,7 @@
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Image Source="{Binding ThumbnailSource}" Width="{DynamicResource ImageThumbWidth}" Height="{DynamicResource ImageThumbHeight}" Stretch="UniformToFill"
                        RenderOptions.BitmapScalingMode="HighQuality"/>
-                <TextBlock Text="{Binding ResolutionText}" FontSize="{DynamicResource ImageResFontSize}" FontWeight="Bold"
+                <TextBlock Text="{Binding ResolutionText}" FontSize="{DynamicResource ImageResFontSize}" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextColor}" TextDecorations="None"
                            VerticalAlignment="Center" Margin="4,0,0,0"/>
             </StackPanel>
@@ -62,20 +65,20 @@
                          VerticalAlignment="Center"
                          Fill="{Binding TextContent, Converter={StaticResource HexToColorConverter}}"/>
                 <TextBlock Text="{Binding DisplayText}" FontSize="{DynamicResource ItemFontSize}"
-                           FontWeight="Bold" Foreground="{DynamicResource TextColor}"
+                           FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"
                            TextTrimming="CharacterEllipsis" VerticalAlignment="Center" TextDecorations="None"/>
             </StackPanel>
         </DataTemplate>
 
         <DataTemplate x:Key="UrlContentTemplate">
             <TextBlock Text="{Binding DisplayText}" FontSize="{DynamicResource ItemFontSize}"
-                       FontWeight="Bold" Foreground="{DynamicResource AccentColor}"
+                       FontWeight="SemiBold" Foreground="{DynamicResource AccentColor}"
                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" TextDecorations="None"/>
         </DataTemplate>
 
         <DataTemplate x:Key="TextContentTemplate">
             <TextBlock Text="{Binding DisplayText}" FontSize="{DynamicResource ItemFontSize}"
-                       FontWeight="Bold" Foreground="{DynamicResource TextColor}"
+                       FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"
                        TextTrimming="CharacterEllipsis" VerticalAlignment="Center" TextDecorations="None"/>
         </DataTemplate>
         
@@ -99,7 +102,7 @@
                         <Border Background="{TemplateBinding Background}" 
                                 BorderBrush="{TemplateBinding BorderBrush}" 
                                 BorderThickness="{TemplateBinding BorderThickness}" 
-                                CornerRadius="4">
+                                CornerRadius="8" Padding="4">
                             <ItemsPresenter/>
                         </Border>
                     </ControlTemplate>
@@ -133,15 +136,17 @@
         </Style>
     </Window.Resources>
 
-    <Grid x:Name="RootGrid" Background="{DynamicResource AppBackground}" PreviewMouseLeftButtonDown="RootGrid_PreviewMouseLeftButtonDown">
+    <Grid x:Name="RootGrid" Background="Transparent" PreviewMouseLeftButtonDown="RootGrid_PreviewMouseLeftButtonDown">
         <tb:TaskbarIcon x:Name="TrayIcon"
+                        Width="0" Height="0"
+                        HorizontalAlignment="Left" VerticalAlignment="Top"
                         ToolTipText="Totthodhara is running"
                         MenuActivation="RightClick"
                         TrayMouseDoubleClick="TaskbarIcon_TrayMouseDoubleClick">
             <tb:TaskbarIcon.ContextMenu>
                 <ContextMenu Style="{StaticResource ModernContextMenu}">
                     <MenuItem Header="Show Shelf" Click="TaskbarIcon_TrayMouseDoubleClick" />
-                    <MenuItem Header="Check for Updates..." Click="CheckForUpdates_Click" />
+                    <MenuItem Header="Check updates" Click="CheckForUpdates_Click" />
                     <Separator>
                         <Separator.Template>
                             <ControlTemplate TargetType="Separator">
@@ -154,41 +159,133 @@
             </tb:TaskbarIcon.ContextMenu>
         </tb:TaskbarIcon>
 
-        <Border x:Name="CapsuleBorder" 
-                CornerRadius="18" 
-                Background="{DynamicResource AppBackground}"
-                BorderBrush="Transparent" 
-                BorderThickness="0"
-                SnapsToDevicePixels="True"
-                TextOptions.TextFormattingMode="Display"
-                TextOptions.TextRenderingMode="ClearType"
-                RenderOptions.ClearTypeHint="Enabled">
-            <Border.Effect>
-                <DropShadowEffect ShadowDepth="3" BlurRadius="14" Opacity="{DynamicResource ShadowOpacity}" Color="{DynamicResource ShadowColor}"/>
-            </Border.Effect>
-            <Grid>
+        <Border ClipToBounds="True">
+            <Border x:Name="CapsuleBorder" 
+                    CornerRadius="18" 
+                    Background="{DynamicResource AppBackground}"
+                    BorderBrush="{DynamicResource BorderColor}" 
+                    BorderThickness="0"
+                    SnapsToDevicePixels="True"
+                    TextOptions.TextFormattingMode="Display"
+                    TextOptions.TextRenderingMode="ClearType"
+                    RenderOptions.ClearTypeHint="Enabled"
+                    ClipToBounds="True">
+            <Grid Margin="6,0,6,0" x:Name="ShelfGrid" HorizontalAlignment="Stretch">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/> <!-- Left Monitors (when on left) -->
                     <ColumnDefinition Width="Auto"/> <!-- Scroll Left -->
-                    <ColumnDefinition Width="*"/>    <!-- Middle ScrollArea -->
+                    <ColumnDefinition x:Name="ItemsColumn" Width="*"/>    <!-- Middle ScrollArea -->
                     <ColumnDefinition Width="Auto"/> <!-- Scroll Right -->
                     <ColumnDefinition Width="Auto"/> <!-- Search Button -->
                     <ColumnDefinition Width="Auto"/> <!-- MultiPaste Toggle -->
                     <ColumnDefinition Width="Auto"/> <!-- PasteAll Button -->
-                    <ColumnDefinition Width="Auto"/> <!-- System Monitor -->
+                    <ColumnDefinition Width="Auto"/> <!-- System Monitor (right) -->
+                    <ColumnDefinition Width="Auto"/> <!-- World Clock (right) -->
                     <ColumnDefinition Width="Auto"/> <!-- Plugins -->
                     <ColumnDefinition Width="Auto"/> <!-- More Button -->
                 </Grid.ColumnDefinitions>
 
+                <!-- Left Monitors - speed and hardware when on left -->
+                <StackPanel x:Name="LeftMonitorsPanel" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
+                            Visibility="{Binding ShowLeftMonitors, Converter={StaticResource BoolToVis}}">
+                    <!-- Network Download Left -->
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                            Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
+                        <Border.ToolTip>
+                            <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
+                                <Canvas Width="10" Height="12">
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,9 M3,7 L5,9 L7,7"/>
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Network Upload Left -->
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                            Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
+                        <Border.ToolTip>
+                            <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
+                                <Canvas Width="10" Height="12">
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,11 L5,3 M3,5 L5,3 L7,5"/>
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- CPU Left -->
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                            Visibility="{Binding ShowHardwareOnLeft, Converter={StaticResource BoolToVis}}">
+                        <Border.ToolTip>
+                            <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="CPU Usage"/></ToolTip>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Viewbox Width="{DynamicResource SysMonitorCanvasSize}" Height="{DynamicResource SysMonitorCanvasSize}" Margin="0,0,1,0" VerticalAlignment="Center">
+                                <Canvas Width="14" Height="14">
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" Fill="Transparent" Data="M2,2 L12,2 L12,12 L2,12 Z"/>
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="0.8" Fill="Transparent" Data="M5,5 L9,5 L9,9 L5,9 Z"/>
+                                    <Line X1="4" Y1="0" X2="4" Y2="2" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="7" Y1="0" X2="7" Y2="2" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="10" Y1="0" X2="10" Y2="2" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="4" Y1="12" X2="4" Y2="14" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="7" Y1="12" X2="7" Y2="14" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="10" Y1="12" X2="10" Y2="14" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="0" Y1="4" X2="2" Y2="4" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="0" Y1="7" X2="2" Y2="7" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="0" Y1="10" X2="2" Y2="10" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="12" Y1="4" X2="14" Y2="4" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="12" Y1="7" X2="14" Y2="7" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Line X1="12" Y1="10" X2="14" Y2="10" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                    <Ellipse Canvas.Left="2.5" Canvas.Top="2.5" Width="1.5" Height="1.5" Fill="{DynamicResource IconColor}"/>
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="{Binding CpuUsage, StringFormat={}{0:00}%}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" MinWidth="30" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                    <!-- Memory Left -->
+                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                            Visibility="{Binding ShowHardwareOnLeft, Converter={StaticResource BoolToVis}}">
+                        <Border.ToolTip>
+                            <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Memory Usage"/></ToolTip>
+                        </Border.ToolTip>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Viewbox Width="{DynamicResource SysMonitorCanvasSize}" Height="{DynamicResource SysMonitorCanvasSize}" Margin="0,0,1,0" VerticalAlignment="Center">
+                                <Canvas Width="14" Height="14">
+                                <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" Fill="Transparent" Data="M1,3 L13,3 L13,11 L1,11 Z"/>
+                                <Line X1="3" Y1="1" X2="3" Y2="3" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="5" Y1="1" X2="5" Y2="3" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="7" Y1="1" X2="7" Y2="3" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="9" Y1="1" X2="9" Y2="3" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="11" Y1="1" X2="11" Y2="3" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="3" Y1="11" X2="3" Y2="13" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="5" Y1="11" X2="5" Y2="13" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="7" Y1="11" X2="7" Y2="13" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="9" Y1="11" X2="9" Y2="13" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="11" Y1="11" X2="11" Y2="13" Stroke="{DynamicResource IconColor}" StrokeThickness="1"/>
+                                <Line X1="2" Y1="7" X2="12" Y2="7" Stroke="{DynamicResource IconColor}" StrokeThickness="0.6"/>
+                                </Canvas>
+                            </Viewbox>
+                            <TextBlock Text="{Binding MemoryUsage, StringFormat={}{0:00}%}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" MinWidth="30" TextAlignment="Right"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
                 <!-- Scroll Left Button -->
-                <Button Grid.Column="0" Click="ScrollLeft_Click" 
+                <Button Grid.Column="1" Click="ScrollLeft_Click" 
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}" 
-                        Margin="2,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}">
+                        Margin="1,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
+                        Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="background" CornerRadius="6" Background="Transparent" Padding="4">
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Padding="4">
                                             <ui:SymbolIcon Symbol="ChevronLeft24" 
                                                            FontSize="{DynamicResource ToolBarIconSize}"
                                                            HorizontalAlignment="Center" 
@@ -214,7 +311,8 @@
                 </Button>
 
                 <!-- Middle: Horizontal ScrollViewer + ItemsControl -->
-                <Border Grid.Column="1" Margin="2,0" Background="Transparent">
+                <Border Grid.Column="2" Margin="1,0" Background="Transparent"
+                        Visibility="{Binding HideClipboard, Converter={StaticResource BoolToHidden}}">
                     <Border.OpacityMask>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="Transparent" Offset="0.0" />
@@ -238,12 +336,12 @@
                                   VirtualizingPanel.ScrollUnit="Item">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal"/>
+                                <VirtualizingStackPanel Orientation="Horizontal" VirtualizationMode="Recycling"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border CornerRadius="{DynamicResource ItemCircleCorner}" Height="{DynamicResource ItemCardHeight}" Margin="2,0" Padding="{DynamicResource ItemPadding}" MinWidth="48" MaxWidth="180" VerticalAlignment="Center" SnapsToDevicePixels="True"
+                            <Border CornerRadius="{DynamicResource ItemCircleCorner}" Height="{DynamicResource ItemCardHeight}" Margin="2,0" Padding="{DynamicResource ItemPadding}" MinWidth="48" MaxWidth="160" VerticalAlignment="Center" SnapsToDevicePixels="True"
                                     BorderThickness="0.5"
                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Border.Style>
@@ -439,15 +537,16 @@
                                                       ContentTemplateSelector="{StaticResource ItemContentSelector}"
                                                       VerticalAlignment="Center" Margin="0,0,6,0"/>
 
-                                    <!-- URL Open Button (Column 3) -->
-                                    <Button Grid.Column="3" 
-                                            Click="OpenUrl_Click"
-                                            Background="Transparent" BorderThickness="0"
-                                            Padding="2,0" Margin="2,0,0,0"
-                                            VerticalAlignment="Center"
-                                            FocusVisualStyle="{x:Null}"
-                                            Visibility="{Binding IsUrl, Converter={StaticResource BoolToVis}}"
-                                            ToolTip="Open URL">
+<!-- URL Open Button (Column 3) -->
+                                     <Button Grid.Column="3" 
+                                             Click="OpenUrl_Click"
+                                             PreviewMouseDown="OpenUrl_PreviewMouseDown"
+                                             Background="Transparent" BorderThickness="0"
+                                             Padding="2,0" Margin="2,0,0,0"
+                                             VerticalAlignment="Center"
+                                             FocusVisualStyle="{x:Null}"
+                                             Visibility="{Binding IsUrl, Converter={StaticResource BoolToVis}}"
+                                             ToolTip="Open URL">
                                         <ui:SymbolIcon Symbol="Open24" FontSize="14" Foreground="{DynamicResource IconColor}"/>
                                     </Button>
                                 </Grid>
@@ -474,15 +573,16 @@
                 </Border>
 
                 <!-- Scroll Right Button -->
-                <Button Grid.Column="2" Click="ScrollRight_Click" 
+                <Button Grid.Column="3" Click="ScrollRight_Click" 
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}" 
-                        Margin="2,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}">
+                        Margin="1,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
+                        Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="background" CornerRadius="6" Background="Transparent" Padding="4">
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Padding="4">
                                             <ui:SymbolIcon Symbol="ChevronRight24" 
                                                            FontSize="{DynamicResource ToolBarIconSize}"
                                                            HorizontalAlignment="Center" 
@@ -507,28 +607,40 @@
                     </Button.Style>
                 </Button>
 
-                <!-- Status Toast overlay (moved to Column 3 - search area) -->
-                <Border Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Background="{DynamicResource CardBg}" CornerRadius="10" Padding="10,3"
-                        BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5"
-                        Panel.ZIndex="10"
-                        Visibility="{Binding DebugStatus, Converter={StaticResource DebugStatusToVisibilityConverter}}">
-                    <TextBlock Text="{Binding DebugStatus}" Foreground="{DynamicResource AccentColor}" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                </Border>
+                <!-- Status Toast overlay — Popup centered above the shelf with animation -->
+                <Popup x:Name="StatusToastPopup"
+                       AllowsTransparency="True" Placement="Top"
+                       VerticalOffset="-10" StaysOpen="False" PopupAnimation="Slide">
+                    <Border x:Name="StatusToastBorder" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="16,8"
+                            BorderBrush="{DynamicResource AccentColor}" BorderThickness="1"
+                            RenderTransformOrigin="0.5,0.5">
+                        <Border.RenderTransform>
+                            <TransformGroup>
+                                <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
+                                <TranslateTransform Y="10"/>
+                            </TransformGroup>
+                        </Border.RenderTransform>
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3" Color="Black"/>
+                        </Border.Effect>
+                        <TextBlock x:Name="StatusToastText" Text="{Binding DebugStatus}" Foreground="{DynamicResource AccentColor}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Border>
+                </Popup>
 
                 <!-- Search Toggle Button / Inline Search Box -->
-                <Button Grid.Column="3" x:Name="SearchToggleButton"
+                <Button Grid.Column="4" x:Name="SearchToggleButton"
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
-                        Margin="2,0" VerticalAlignment="Center"
+                        Margin="1,0" VerticalAlignment="Center"
                         Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                         Click="SearchToggleButton_Click"
-                        FocusVisualStyle="{x:Null}">
+                        FocusVisualStyle="{x:Null}"
+                        Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="background" CornerRadius="6" Background="Transparent" Padding="4">
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Padding="4">
                                             <ui:SymbolIcon Symbol="Search24" 
                                                            FontSize="{DynamicResource ToolBarIconSize}"
                                                            HorizontalAlignment="Center" 
@@ -554,18 +666,19 @@
                 </Button>
 
                 <!-- MultiPaste Toggle Button -->
-                <ToggleButton Grid.Column="4" x:Name="MultiPasteToggleButton"
+                <ToggleButton Grid.Column="5" x:Name="MultiPasteToggleButton"
                               Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
-                              Margin="2,0" VerticalAlignment="Center"
+                              Margin="1,0" VerticalAlignment="Center"
                               Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                               FocusVisualStyle="{x:Null}"
-                              IsChecked="{Binding IsMultiPasteMode}">
+                              IsChecked="{Binding IsMultiPasteMode}"
+                              Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <ToggleButton.Style>
                         <Style TargetType="ToggleButton">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="background" CornerRadius="12" Background="Transparent" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}">
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
@@ -599,8 +712,8 @@
                 </ToggleButton>
 
                 <!-- Paste All Button (visible when items selected for multi-paste) -->
-                <Button Grid.Column="5" x:Name="PasteAllButton"
-                        Margin="2,0" VerticalAlignment="Center" Padding="0"
+                <Button Grid.Column="6" x:Name="PasteAllButton"
+                        Margin="1,0" VerticalAlignment="Center" Padding="0"
                         Height="{DynamicResource ToolBarBtnSize}"
                         HorizontalContentAlignment="Center"
                         Click="PasteAllButton_Click"
@@ -612,7 +725,7 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="background" CornerRadius="12" Background="{DynamicResource AccentColor}" Padding="12,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <Border x:Name="background" CornerRadius="8" Background="{DynamicResource AccentColor}" Padding="12,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center" HorizontalAlignment="Center">
                                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
@@ -627,6 +740,9 @@
                                 <DataTrigger Binding="{Binding HasSelectedItems}" Value="True">
                                     <Setter Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding HideClipboard}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Button.Style>
@@ -634,34 +750,42 @@
                 </Button>
 
                 <!-- System Monitor Widgets -->
-                <Border Grid.Column="6" VerticalAlignment="Center" Margin="2,0"
+<Border Grid.Column="7" VerticalAlignment="Center" Margin="1,0"
                         Visibility="{Binding ShowSystemMonitor, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- Network Download -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="12" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
-                                Visibility="{Binding ShowNetworkMonitor, Converter={StaticResource BoolToVis}}">
-                            <Border.ToolTip>
-                                <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Network Download Speed"/></ToolTip>
+                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                                 Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
+                                <Border.ToolTip>
+                                    <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
                             </Border.ToolTip>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="↓" FontSize="{DynamicResource SysMonitorTextSize}" FontWeight="Bold" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,1,0" Width="{DynamicResource SysMonitorCanvasSize}" TextAlignment="Center"/>
-                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" MinWidth="62" TextAlignment="Left"/>
+                                <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="12">
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,9 M3,7 L5,9 L7,7"/>
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
                             </StackPanel>
                         </Border>
                         <!-- Network Upload -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="12" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
-                                Visibility="{Binding ShowNetworkMonitor, Converter={StaticResource BoolToVis}}">
+                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                                 Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
-                                <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Network Upload Speed"/></ToolTip>
+                                <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
                             </Border.ToolTip>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <TextBlock Text="↑" FontSize="{DynamicResource SysMonitorTextSize}" FontWeight="Bold" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,1,0" Width="{DynamicResource SysMonitorCanvasSize}" TextAlignment="Center"/>
-                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" MinWidth="62" TextAlignment="Left"/>
+                                <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="12">
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,11 L5,3 M3,5 L5,3 L7,5"/>
+                                    </Canvas>
+                                </Viewbox>
+                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
                             </StackPanel>
                         </Border>
                         <!-- CPU - chip icon with pins -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="12" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
-                                Visibility="{Binding ShowCpuRamMonitor, Converter={StaticResource BoolToVis}}">
+                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                                Visibility="{Binding ShowHardwareOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="CPU Usage"/></ToolTip>
                             </Border.ToolTip>
@@ -689,8 +813,8 @@
                             </StackPanel>
                         </Border>
                         <!-- Memory - horizontal RAM stick -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="12" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
-                                Visibility="{Binding ShowCpuRamMonitor, Converter={StaticResource BoolToVis}}">
+                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                                Visibility="{Binding ShowHardwareOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Memory Usage"/></ToolTip>
                             </Border.ToolTip>
@@ -717,19 +841,57 @@
                     </StackPanel>
                 </Border>
 
+                <!-- World Clock (pinned clocks on top) -->
+<Border Grid.Column="8" VerticalAlignment="Center" Margin="1,0"
+                        Visibility="{Binding ShowWorldClock, Converter={StaticResource BoolToVis}}">
+                    <ItemsControl ItemsSource="{Binding PinnedWorldClocks}" VerticalAlignment="Center">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Padding" Value="6,0"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding DataContext.CompactClock, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                                                    <Setter Property="Padding" Value="4,0"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <Border.ToolTip>
+                                        <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}">
+                                            <TextBlock Text="{Binding ToolTip}" FontSize="12" TextWrapping="Wrap" MaxWidth="260"/>
+                                        </ToolTip>
+                                    </Border.ToolTip>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="&#xE121;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="9" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0" FontWeight="Bold" Opacity="0.7"/>
+                                        <TextBlock Text="{Binding Text}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold" MinWidth="58" TextAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+
                 <!-- Plugin Widgets -->
-                <Border Grid.Column="7" VerticalAlignment="Center" Margin="4,0"
+                <Border Grid.Column="9" VerticalAlignment="Center" Margin="2,0"
                         Visibility="{Binding ShowPlugins, Converter={StaticResource BoolToVis}}">
                     <StackPanel x:Name="PluginContainer" Orientation="Horizontal" VerticalAlignment="Center"/>
                 </Border>
 
-                <!-- Right: More Button with Context Menu -->
-                <Button Grid.Column="8"
+                <!-- Right: More Button with Context Menu (shows app icon) -->
+                <Button Grid.Column="10"
                         x:Name="MoreButton"
                         Background="Transparent"
                         BorderThickness="0"
                         Foreground="{DynamicResource IconColor}"
-                        Margin="2,0"
+                        Margin="1,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
@@ -740,9 +902,9 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border x:Name="background" CornerRadius="6" Background="Transparent" Padding="4">
-                                            <ui:SymbolIcon Symbol="MoreHorizontal24" 
-                                                           FontSize="16"
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Padding="4">
+                                            <ui:SymbolIcon Symbol="Settings24" 
+                                                           FontSize="{DynamicResource ToolBarIconSize}"
                                                            HorizontalAlignment="Center" 
                                                            VerticalAlignment="Center" 
                                                            Foreground="{TemplateBinding Foreground}"/>
@@ -797,13 +959,13 @@
                                     <TextBlock Text="&#xE713;" Width="24" TextAlignment="Center" FontSize="14" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
-                            <MenuItem Header="Check for Updates..." Click="CheckForUpdates_Click">
+                            <MenuItem Header="Check updates" Click="CheckForUpdates_Click">
                                 <MenuItem.Icon>
                                     <TextBlock Text="&#xE895;" Width="24" TextAlignment="Center" FontSize="14" FontFamily="Segoe MDL2 Assets" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                                 </MenuItem.Icon>
                             </MenuItem>
                             <Separator/>
-                            <MenuItem Header="Exit ClipDropPro" Click="ExitApp_Click">
+                            <MenuItem Header="Exit Totthodhara" Click="ExitApp_Click">
                                 <MenuItem.Icon>
                                     <TextBlock Text="✕" Width="20" TextAlignment="Center" FontSize="12" FontFamily="Segoe UI" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                                 </MenuItem.Icon>
@@ -813,5 +975,8 @@
                 </Button>
             </Grid>
         </Border>
+        </Border>
     </Grid>
 </Window>
+
+

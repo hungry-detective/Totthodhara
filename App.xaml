@@ -1,9 +1,10 @@
-﻿<Application x:Class="ClipDropPro.App"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:ClipDropPro"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-             ShutdownMode="OnExplicitShutdown">
+<Application x:Class="ClipDropPro.App"
+              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:local="clr-namespace:ClipDropPro"
+              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+              xmlns:sys="clr-namespace:System;assembly=mscorlib"
+              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -11,14 +12,41 @@
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
 
-            <SolidColorBrush x:Key="AppBackground" Color="#A00B0B10" />
+            <!-- Core theme colors - overwritten by MainWindow.UpdateTheme at runtime -->
+            <SolidColorBrush x:Key="AppBackground" Color="#141414" />
             <SolidColorBrush x:Key="TextColor" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="IconColor" Color="#C0C0C0" />
-            <SolidColorBrush x:Key="CardBg" Color="#77222828" />
-            <SolidColorBrush x:Key="WindowBg" Color="#1C1C1C" />
-            <SolidColorBrush x:Key="ControlBg" Color="#AA333338" />
-            <SolidColorBrush x:Key="BorderColor" Color="#553D3D3D" />
+            <SolidColorBrush x:Key="IconColor" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardBg" Color="#12FFFFFF" />
+            <SolidColorBrush x:Key="WindowBg" Color="#141414" />
+            <SolidColorBrush x:Key="ControlBg" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="BorderColor" Color="#28FFFFFF" />
             <SolidColorBrush x:Key="AccentColor" Color="#60CDFF" />
+            <SolidColorBrush x:Key="AccentColorDim" Color="#4060CDFF" />
+            <SolidColorBrush x:Key="MenuBg" Color="#1E1E1E" />
+            <SolidColorBrush x:Key="ToolTipBg" Color="#F51E1E1E" />
+            <sys:Double x:Key="ShadowOpacity">0.45</sys:Double>
+            <Color x:Key="ShadowColor">#FF000000</Color>
+
+            <!-- Item/UI sizing resources - set dynamically by MainWindow.SetItemSizes() -->
+            <sys:Double x:Key="ItemCircleSize">22</sys:Double>
+            <sys:Double x:Key="ItemCircleCorner">18</sys:Double>
+            <sys:Double x:Key="ItemCardHeight">34</sys:Double>
+            <sys:Double x:Key="ItemMargin">4</sys:Double>
+            <sys:Double x:Key="ItemPadding">6</sys:Double>
+            <sys:Double x:Key="ItemFontSize">14</sys:Double>
+            <sys:Double x:Key="ItemIndexFontSize">13</sys:Double>
+            <sys:Double x:Key="ItemMenuHeight">36</sys:Double>
+            <sys:Double x:Key="ItemIconSize">24</sys:Double>
+            <sys:Double x:Key="ItemSymbolFontSize">14</sys:Double>
+            <sys:Double x:Key="ItemImageIconSize">16</sys:Double>
+            <sys:Double x:Key="ImageThumbWidth">24</sys:Double>
+            <sys:Double x:Key="ImageThumbHeight">18</sys:Double>
+            <sys:Double x:Key="ImageResFontSize">10</sys:Double>
+            <sys:Double x:Key="ToolBarBtnSize">28</sys:Double>
+            <sys:Double x:Key="ToolBarIconSize">14</sys:Double>
+            <sys:Double x:Key="SysMonitorTextSize">12</sys:Double>
+            <sys:Double x:Key="SysMonitorCanvasSize">16</sys:Double>
+            <sys:Double x:Key="ItemSmallFontSize">11</sys:Double>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

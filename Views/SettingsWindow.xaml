@@ -18,6 +18,7 @@
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <conv:StringEqualityToVisibilityConverter x:Key="StringEqualityToVisibilityConverter"/>
         <conv:StringEqualityToBoolConverter x:Key="StringEqualityToBoolConverter"/>
 
@@ -173,7 +174,6 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBox">
                         <Grid>
-                            <!-- Background Border -->
                             <Border x:Name="MainBorder" 
                                     Background="{TemplateBinding Background}" 
                                     BorderBrush="{TemplateBinding BorderBrush}" 
@@ -186,16 +186,28 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
-                                <!-- Selected Text -->
                                 <ContentPresenter x:Name="ContentSite"
-                                                  IsHitTestVisible="False"
-                                                  Content="{TemplateBinding SelectionBoxItem}"
-                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                  ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
-                                                  VerticalAlignment="Center"
-                                                  HorizontalAlignment="Left"/>
+                                                   Grid.Column="0"
+                                                   IsHitTestVisible="False"
+                                                   Content="{TemplateBinding SelectionBoxItem}"
+                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                   ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left"/>
 
-                                <!-- Chevron Arrow -->
+                                <TextBox x:Name="PART_EditableTextBox"
+                                          Grid.Column="0"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          CaretBrush="{TemplateBinding Foreground}"
+                                          VerticalAlignment="Center"
+                                          Margin="0"
+                                          Padding="0"
+                                          Visibility="Collapsed"
+                                          Focusable="True"
+                                          IsReadOnly="{TemplateBinding IsReadOnly}"/>
+
                                 <TextBlock Grid.Column="1" 
                                            Text="&#xE70D;" 
                                            FontFamily="Segoe MDL2 Assets" 
@@ -205,8 +217,8 @@
                                            Foreground="{TemplateBinding Foreground}"/>
                             </Grid>
 
-                            <!-- Invisible ToggleButton for Logic -->
                             <ToggleButton x:Name="ToggleButton"
+                                          Grid.Column="1"
                                           Background="Transparent"
                                           BorderThickness="0"
                                           ClickMode="Press"
@@ -221,7 +233,6 @@
                                 </ToggleButton.Template>
                             </ToggleButton>
 
-                            <!-- Modernized Dropdown Popup -->
                             <Popup x:Name="Popup" 
                                    Placement="Bottom" 
                                    IsOpen="{TemplateBinding IsDropDownOpen}" 
@@ -233,7 +244,7 @@
                                       MinWidth="{TemplateBinding ActualWidth}" 
                                       MaxHeight="{TemplateBinding MaxDropDownHeight}">
                                     <Border x:Name="DropDownBorder" 
-                                            Background="{DynamicResource WindowBg}" 
+                                            Background="{DynamicResource MenuBg}" 
                                             BorderThickness="1" 
                                             BorderBrush="{DynamicResource BorderColor}" 
                                             CornerRadius="8" 
@@ -241,7 +252,7 @@
                                         <Border.Effect>
                                             <DropShadowEffect BlurRadius="10" Color="Black" Opacity="0.2" ShadowDepth="2"/>
                                         </Border.Effect>
-                                        <ScrollViewer Margin="4" SnapsToDevicePixels="True">
+                                        <ScrollViewer Margin="4" SnapsToDevicePixels="True" Background="Transparent">
                                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
                                         </ScrollViewer>
                                     </Border>
@@ -251,6 +262,14 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="False">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -281,6 +300,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
         <Style TargetType="ListBoxItem">
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
             <Setter Property="Template">
@@ -380,7 +400,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Network Speed Monitor -->
+                <!-- Hide Clipboard Items -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -388,16 +408,80 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE968;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Network speed" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Show upload/download speed on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Hide clipboard items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Hide items, search and multi-paste — compact toolbar-only shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowNetworkMonitor}"/>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HideClipboard}"/>
                     </Grid>
                 </Border>
 
-                <!-- CPU & RAM Monitor -->
+                <!-- Network Speed + Speed on left (combined) -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE968;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="Network speed" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Show upload/download speed on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowNetworkMonitor}"/>
+                        </Grid>
+                        <Grid Margin="32,10,0,0" Visibility="{Binding ShowNetworkMonitor, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE752;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                <TextBlock Text="Speed on left" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Move only speed to the left of scroll buttons" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding MonitorsOnLeft}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- CPU & RAM Monitor + Hardware on left -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE963;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="CPU &amp; RAM" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Show processor and memory usage on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowCpuRamMonitor}"/>
+                        </Grid>
+                        <Grid Margin="32,10,0,0" Visibility="{Binding ShowCpuRamMonitor, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE753;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                <TextBlock Text="Hardware on left" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Move CPU/RAM to the left of scroll buttons" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HardwareOnLeft}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- World Clock -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -405,13 +489,140 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE963;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <TextBlock Text="&#xE121;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="CPU &amp; RAM" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Show processor and memory usage on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="World clock" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Show selected time zone on the shelf (e.g. Arizona MST)" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowCpuRamMonitor}"/>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowWorldClock}"/>
                     </Grid>
+                </Border>
+                <!-- World Clock Pinned Zones (clean + searchable) -->
+                <Border Style="{StaticResource SettingCardStyle}" Visibility="{Binding ShowWorldClock, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE775;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="Pinned clocks" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="{Binding PinnedCountText}" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                        </Grid>
+                        <!-- Only pinned clocks shown (clean) - uses visibility to avoid crash when unpinning -->
+                        <ItemsControl ItemsSource="{Binding WorldClockPinItems}" Margin="32,12,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPinned}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Display}" FontSize="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IsPinned}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <!-- Search box with live filter -->
+                        <TextBox Margin="32,12,0,0" Padding="8,6" Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                                  Text="{Binding ZoneSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" ToolTip="Type to filter — e.g. Tokyo, Dhaka, Arizona">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+<ControlTemplate TargetType="TextBox">
+                                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                    <Grid>
+                                                        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                                                        <TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{TemplateBinding Foreground}" CaretBrush="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="0" Padding="0" Focusable="True" IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                                                        <TextBlock Text="Search time zones..." Foreground="{DynamicResource TextColor}" Opacity="0.4" Margin="0,0,0,0" IsHitTestVisible="False" VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsFocused" Value="True">
+                                                        <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsFocused" Value="False">
+                                                        <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Collapsed"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <Grid Margin="32,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       ItemsSource="{Binding AvailableZonesToAdd}" SelectedItem="{Binding SelectedZoneToAdd}"
+                                       IsEditable="False" IsDropDownOpen="{Binding IsZoneDropdownOpen, Mode=TwoWay}"
+                                       Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"
+                                       Padding="8,4" ToolTip="Filtered time zones — choose then click Add">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Key}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.Style>
+                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasAvailableZones}" Value="False">
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ComboBox.Style>
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Add" Padding="14,6" Command="{Binding AddPinnedZoneCommand}"
+                                     Background="{DynamicResource AccentColor}" Foreground="White" BorderThickness="0" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="Type above to live-filter — choose from dropdown then click Add to pin" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="32,6,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
                 </Border>
 
                 <!-- Copy to Destination -->
@@ -514,8 +725,6 @@
                                   Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
                     </Grid>
                 </Border>
-
-
             </StackPanel>
         </ScrollViewer>
 
@@ -645,6 +854,7 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+
         <!-- About Section -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
             <StackPanel>
@@ -695,6 +905,38 @@
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Auto-check on startup" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically check for updates when the app starts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoCheckUpdates}"/>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xEA94;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Silent auto-update" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Download and prepare updates in background without prompts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding SilentAutoUpdate}"/>
                     </Grid>
                 </Border>
 
