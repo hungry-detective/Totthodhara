@@ -352,7 +352,7 @@
                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Border.Style>
                                     <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{DynamicResource CardBg}"/>
+                                        <Setter Property="Background" Value="{DynamicResource CardItemBg}"/>
                                         <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
                                         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
                                         <Setter Property="RenderTransform">
@@ -363,7 +363,7 @@
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
-                                                <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
                                                 <Setter Property="BorderThickness" Value="1"/>
                                                 <Setter Property="Cursor" Value="Hand"/>
                                             </Trigger>

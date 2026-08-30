@@ -19,7 +19,7 @@
 
             <!-- Custom Title Bar -->
             <Grid Grid.Row="0" Background="{DynamicResource ControlBg}" Height="40" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                <TextBlock Text="What's New in Totthodhara" VerticalAlignment="Center" Margin="20,0" FontWeight="Bold" FontSize="14"/>
+                <TextBlock Text="What's New in Totthodhara" VerticalAlignment="Center" Margin="20,0" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource TextColor}"/>
                 <Button HorizontalAlignment="Right" VerticalAlignment="Center" Margin="10,0" Width="30" Height="30" 
                         Background="Transparent" BorderThickness="0" Click="CloseButton_Click">
                     <TextBlock Text="✕" VerticalAlignment="Center" HorizontalAlignment="Center"/>
@@ -29,47 +29,47 @@
             <!-- Content Area -->
             <ScrollViewer Grid.Row="1" Margin="20" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="Welcome to Totthodhara" FontSize="20" FontWeight="Bold" Margin="0,0,0,20"/>
-                    
-                    <ui:Card Margin="0,0,0,15" Padding="15">
-                        <StackPanel>
-                            <TextBlock Text="System Monitor" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Live CPU, Memory, and Network speed meters right on your shelf. Monitor your system at a glance." 
-                                       TextWrapping="Wrap" Opacity="0.8"/>
-                        </StackPanel>
-                    </ui:Card>
+                    <TextBlock Text="Welcome to Totthodhara" FontSize="20" FontWeight="Bold" Margin="0,0,0,20" Foreground="{DynamicResource TextColor}"/>
 
-                    <ui:Card Margin="0,0,0,15" Padding="15">
+                    <Border Margin="0,0,0,15" Padding="15" CornerRadius="8" Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5">
                         <StackPanel>
-                            <TextBlock Text="Multi-Paste Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Select multiple clipboard items and paste them all at once in sequence. Perfect for batch workflows." 
-                                       TextWrapping="Wrap" Opacity="0.8"/>
+                            <TextBlock Text="System Monitor" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Live CPU, Memory, and Network speed meters right on your shelf. Monitor your system at a glance."
+                                       TextWrapping="Wrap" Opacity="0.7" Foreground="{DynamicResource TextColor}"/>
                         </StackPanel>
-                    </ui:Card>
+                    </Border>
 
-                    <ui:Card Margin="0,0,0,15" Padding="15">
+                    <Border Margin="0,0,0,15" Padding="15" CornerRadius="8" Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5">
                         <StackPanel>
-                            <TextBlock Text="Favicons for URLs" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock Text="URL items now show website favicons so you can instantly identify where a link came from." 
-                                       TextWrapping="Wrap" Opacity="0.8"/>
+                            <TextBlock Text="Multi-Paste Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Select multiple clipboard items and paste them all at once in sequence. Perfect for batch workflows."
+                                       TextWrapping="Wrap" Opacity="0.7" Foreground="{DynamicResource TextColor}"/>
                         </StackPanel>
-                    </ui:Card>
+                    </Border>
 
-                    <ui:Card Margin="0,0,0,15" Padding="15">
+                    <Border Margin="0,0,0,15" Padding="15" CornerRadius="8" Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5">
                         <StackPanel>
-                            <TextBlock Text="Pill-Shaped Items" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Redesigned clipboard items with smooth pill shapes, better animations, and refined hover effects." 
-                                       TextWrapping="Wrap" Opacity="0.8"/>
+                            <TextBlock Text="Favicons for URLs" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="URL items now show website favicons so you can instantly identify where a link came from."
+                                       TextWrapping="Wrap" Opacity="0.7" Foreground="{DynamicResource TextColor}"/>
                         </StackPanel>
-                    </ui:Card>
+                    </Border>
 
-                    <ui:Card Margin="0,0,0,15" Padding="15">
+                    <Border Margin="0,0,0,15" Padding="15" CornerRadius="8" Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5">
                         <StackPanel>
-                            <TextBlock Text="Auto-Clean by Hours" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock Text="Old clips are now cleaned up hourly instead of daily. Keep your shelf tidy without manual effort." 
-                                       TextWrapping="Wrap" Opacity="0.8"/>
+                            <TextBlock Text="Pill-Shaped Items" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Redesigned clipboard items with smooth pill shapes, better animations, and refined hover effects."
+                                       TextWrapping="Wrap" Opacity="0.7" Foreground="{DynamicResource TextColor}"/>
                         </StackPanel>
-                    </ui:Card>
+                    </Border>
+
+                    <Border Margin="0,0,0,15" Padding="15" CornerRadius="8" Background="{DynamicResource ControlBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5">
+                        <StackPanel>
+                            <TextBlock Text="Auto-Clean by Hours" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Old clips are now cleaned up hourly instead of daily. Keep your shelf tidy without manual effort."
+                                       TextWrapping="Wrap" Opacity="0.7" Foreground="{DynamicResource TextColor}"/>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </ScrollViewer>
 

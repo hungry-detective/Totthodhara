@@ -5,6 +5,9 @@
 **DO NOT refactor working code.**
 **DO NOT add new features unless asked.**
 **Always preserve the exact behavior of drag-and-drop, click-to-paste, animations, and acrylic glass.**
+**Clipboard item cards (`CardItemBg`) are visually distinct from widget pills (`WidgetBg`) — never merge them.**
+**Never assign a `LinearGradientBrush` to a variable that is later cast to `SolidColorBrush` (causes `InvalidCastException` at startup).**
+**Never add `DropShadowEffect` to item cards — it extends render bounds beyond the element and breaks padding consistency across themes.**
 
 ---
 
@@ -229,13 +232,17 @@ The app icon (`app.ico`) must be a perfect square. A non-square PNG renamed to .
 - Checks `Shell_TrayWnd`, `WorkerW`, `Progman` → force show
 
 ### 24. Theme Engine (UpdateTheme / ApplyCustomColors)
-- **3 modes:** Light, Dark, System (reads registry)
-- Sets 12 resource brushes: `AppBackground`, `TextColor`, `IconColor`, `CardBg`, `ControlBg`, `BorderColor`, `MenuBg`, `ToolTipBg`, `AccentColor`, `WindowBg`, `ShadowOpacity`, `ShadowColor`
+- **3 modes:** Light, Dark, System (reads registry), plus Transparent (custom user theme)
+- Sets 13 resource brushes: `AppBackground`, `TextColor`, `IconColor`, `CardBg`, `CardItemBg`, `WidgetBg`, `ControlBg`, `BorderColor`, `MenuBg`, `ToolTipBg`, `AccentColor`, `WindowBg`, `ShadowOpacity`, `ShadowColor`
+- **`CardItemBg` is SEPARATE from `CardBg`** — see Item Card Visual Rules below. Never collapse them.
+- **`WidgetBg` is for hardware pills only** (CPU/RAM/Network/Clock) — separate from `CardItemBg`
 - **DO NOT** remove any of the resource keys — each is used in XAML
 
 **Light Mode Colors:**
 - Capsule bar (AppBackground): `#FFFFFF` solid (no acrylic, no blur)
-- CardBg: `#1A000000` (black 10% overlay — semi-transparent surface)
+- CardItemBg (clipboard items): `#F7F2EC` solid 93% alpha (warm white, flat)
+- CardBg (other surfaces): `#10000000` (black 6% overlay)
+- WidgetBg (hardware pills): `#08FFFFFF` (white 3% overlay)
 - ControlBg (hover): `#33000000` (black 20% overlay)
 - TextColor: `#222222`
 - IconColor: `#222222`
@@ -243,21 +250,58 @@ The app icon (`app.ico`) must be a perfect square. A non-square PNG renamed to .
 - AccentColor: `#0078D4`
 - MenuBg: `#FAFAFA`
 - ToolTipBg: `rgba(250,250,250,245)`
+- WindowBg: `#FFFFFF`
 - ShadowOpacity: `0.2`
 - ShadowColor: Black
 
-**Dark Mode Colors:**
-- Capsule bar (AppBackground): `#141414` solid (no acrylic, no blur)
-- CardBg: `#1AFFFFFF` (white 10% overlay — semi-transparent surface)
-- ControlBg (hover): `#33FFFFFF` (white 20% overlay)
+**Dark Mode Colors (Win11 Start-menu tone — desaturated blue-grey):**
+- Capsule bar (AppBackground): vertical gradient `#222226` (top) → `#18181C` (bottom)
+- CardItemBg (clipboard items): `#2C2C32` solid (flat elevated surface, lighter than shelf)
+- CardBg (other surfaces): `#08FFFFFF` (white 3% overlay)
+- WidgetBg (hardware pills): `#03FFFFFF` (white 1% overlay — barely visible)
+- ControlBg (hover): `#383840` solid (elevated, lighter than CardItemBg)
 - TextColor: White
 - IconColor: White
 - BorderColor: `rgba(255,255,255,40)`
 - AccentColor: `#60CDFF`
 - MenuBg: `#1E1E1E`
 - ToolTipBg: `rgba(30,30,30,245)`
-- ShadowOpacity: `0.45`
+- WindowBg: `#1C1C20`
+- ShadowOpacity: `0.35`
 - ShadowColor: Black
+
+**Transparent Mode Colors (custom user theme):**
+- AppBackground: `Transparent` (desktop shows through)
+- CardItemBg: `#18FFFFFF` (white 10% — translucent)
+- WidgetBg: `#08FFFFFF` (white 3% — barely visible pills)
+- ControlBg (hover): `#38FFFFFF` (white 22%)
+- BorderColor: `#55FFFFFF`
+- AccentColor: `#60CDFF`
+- TextColor: White
+- IconColor: White
+- ShadowOpacity: `0` (no shadow — bar is invisible)
+- All other colors match dark mode
+
+### 24b. Item Card Visual Rules (CRITICAL)
+**Two completely separate background resources — never merge them:**
+
+| Resource | Used by | Background style |
+|---|---|---|
+| `CardItemBg` | Clipboard item cards (ItemsControl) | **Flat solid tint** — the only place items get a distinct color |
+| `WidgetBg` | Hardware pills (CPU/RAM/Network/Clock), toolbar buttons | **Subtle overlay** — meant to be barely visible |
+
+**Rules:**
+1. **Clipboard item cards use `CardItemBg` (NOT `CardBg`)** — see `MainWindow.xaml:355`. Do not change this binding.
+2. **Card background must be a `SolidColorBrush`** — never assign a `LinearGradientBrush` to a variable that later gets cast to `SolidColorBrush` (causes `InvalidCastException` at startup, e.g. `var cardBg = cardItemBg` then `((SolidColorBrush)cardBg).Color`).
+3. **No `DropShadowEffect` on item cards** — extends render bounds ~6px around each card, making them appear larger and breaking visual padding consistency across themes (transparent/dark). Per the agent prompt: *"DropShadowEffect extends render bounds BEYOND the window"*.
+4. **No `BorderThickness` on `CapsuleBorder`** either (already documented above for shelf).
+5. **Padding is uniform across all themes** — `ItemPadding` is set in `SetItemSizes()` and does NOT vary by theme. Card visual differences come from background color, not size.
+6. **Hover on item cards** = `ControlBg` background + `AccentColor` border at `BorderThickness=1` (replaces old `BorderColor` border for visual feedback).
+
+### 24c. What's New Window Cards
+- **DO NOT use `<ui:Card>`** (WPF-UI 4.3.0) — it has a hardcoded white background that ignores the theme.
+- Use themed `<Border>` with `Background="{DynamicResource ControlBg}"`, `BorderBrush="{DynamicResource BorderColor}"`, `BorderThickness="0.5"`, `CornerRadius="8"`.
+- All `TextBlock`s must bind `Foreground="{DynamicResource TextColor}"` — explicit binding, never rely on inheritance.
 
 ### 25. Global Hotkey
 - Default: Ctrl + ` (OemTilde)

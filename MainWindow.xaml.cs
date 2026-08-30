@@ -1158,8 +1158,9 @@ namespace ClipDropPro
                 SetResource("TextColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
                 SetResource("IconColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
                 SetResource("CardBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)));
-                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x10, 0xFF, 0xFF, 0xFF)));
-                SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)));
+                SetResource("CardItemBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)));
+                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF)));
+                SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF)));
                 SetResource("BorderColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)));
                 SetResource("AccentColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF)));
                 SetResource("AccentColorDim", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF)));
@@ -1198,9 +1199,10 @@ namespace ClipDropPro
                 }
                 else
                 {
+                    // Dark mode: Win11 Start-menu tone — desaturated blue-grey
                     var darkGrad = new System.Windows.Media.LinearGradientBrush(
-                        System.Windows.Media.Color.FromRgb(0x12, 0x12, 0x12),
-                        System.Windows.Media.Color.FromRgb(0x06, 0x06, 0x06),
+                        System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x26),
+                        System.Windows.Media.Color.FromRgb(0x18, 0x18, 0x1C),
                         new System.Windows.Point(0, 0),
                         new System.Windows.Point(0, 1));
                     shelfBrush = darkGrad;
@@ -1210,13 +1212,26 @@ namespace ClipDropPro
                 var iconColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
 
                 // Stronger card contrast in dark mode for better visual hierarchy
-                // Card is nearly invisible — blends with shelf for ultra-minimal look
+                // Item cards use a horizontal gradient — brighter near the index number (left),
+                // fading back to the shelf color toward the right.
+                // Dark mode uses a frosted acrylic feel: subtle blue tint with stronger luminance.
+                System.Windows.Media.Brush cardItemBg;
+                if (isLightTheme)
+                {
+                    // Light: soft warm-white tint matching the reference design
+                    cardItemBg = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEE, 0xF7, 0xF2, 0xEC));
+                }
+                else
+                {
+                    // Dark: flat elevated surface, lighter than shelf
+                    cardItemBg = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x2C, 0x2C, 0x32));
+                }
                 var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(0x10, 0x00, 0x00, 0x00)
                     : System.Windows.Media.Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF));
                 var controlBg = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00)
-                    : System.Windows.Media.Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF));
+                    : System.Windows.Media.Color.FromArgb(0xFF, 0x38, 0x38, 0x40));
                 var borderColor = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(30, 0, 0, 0)
                     : System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
@@ -1237,8 +1252,9 @@ namespace ClipDropPro
                 SetResource("TextColor", textColor);
                 SetResource("IconColor", iconColor);
                 SetResource("CardBg", cardBg);
+                SetResource("CardItemBg", cardItemBg);
                 SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                    isLightTheme ? (byte)0x08 : (byte)0x05, 0xFF, 0xFF, 0xFF)));
+                    isLightTheme ? (byte)0x08 : (byte)0x03, 0xFF, 0xFF, 0xFF)));
                 SetResource("ControlBg", controlBg);
                 SetResource("BorderColor", borderColor);
                 SetResource("MenuBg", menuBg);
@@ -1267,8 +1283,8 @@ namespace ClipDropPro
 
                 SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
-                    : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14)));
-                SetResource("ShadowOpacity", isLightTheme ? 0.2d : 0.45d);
+                    : System.Windows.Media.Color.FromRgb(0x1C, 0x1C, 0x20)));
+                SetResource("ShadowOpacity", isLightTheme ? 0.2d : 0.35d);
                 SetResource("ShadowColor", System.Windows.Media.Colors.Black);
             }
 
