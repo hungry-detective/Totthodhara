@@ -1856,48 +1856,34 @@ namespace ClipDropPro
 
                         if (item.IsImage && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
                         {
-                            // Image drag: create temp copy with original filename + DIB bitmap for preview
-                            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaDrag");
-                            try { if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, recursive: true); } catch { }
-                            System.IO.Directory.CreateDirectory(tempDir);
-                            var imgFileName = !string.IsNullOrEmpty(item.FileName) ? item.FileName : System.IO.Path.GetFileName(item.FilePath);
-                            var imgExt = System.IO.Path.GetExtension(item.FilePath);
-                            if (!string.IsNullOrEmpty(imgExt) && !imgFileName.EndsWith(imgExt, System.StringComparison.OrdinalIgnoreCase))
-                                imgFileName += imgExt;
-                            tempFilePath = System.IO.Path.Combine(tempDir, imgFileName);
-                            System.IO.File.Copy(item.FilePath, tempFilePath, overwrite: true);
+                            // Image drag: use ORIGINAL file path (more compatible with target apps
+                            // like opencode, browsers, etc.) + Bitmap + DIB for live preview in
+                            // image-aware targets (WhatsApp, etc.)
                             var data = new System.Windows.DataObject();
                             data.SetData("ClipDropShelfOrigin", item);
-                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { tempFilePath });
-                            // DIB format for live preview in image-aware targets (WhatsApp, etc.)
+                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { item.FilePath });
                             using (var bmp = new System.Drawing.Bitmap(item.FilePath))
-                            using (var ms = new System.IO.MemoryStream())
                             {
-                                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                                var dib = new byte[ms.Length - 14];
-                                System.Buffer.BlockCopy(ms.GetBuffer(), 14, dib, 0, dib.Length);
-                                data.SetData("DeviceIndependentBitmap", new System.IO.MemoryStream(dib));
+                                data.SetData(System.Windows.DataFormats.Bitmap, bmp);
+                                using (var ms = new System.IO.MemoryStream())
+                                {
+                                    bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+                                    var dib = new byte[ms.Length - 14];
+                                    System.Buffer.BlockCopy(ms.GetBuffer(), 14, dib, 0, dib.Length);
+                                    data.SetData("DeviceIndependentBitmap", new System.IO.MemoryStream(dib));
+                                }
                             }
-                            Log($"DragImage: {imgFileName} + DIB");
+                            Log($"DragImage: {System.IO.Path.GetFileName(item.FilePath)} + Bitmap + DIB");
                             var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
                             Log($"DragEnd: result={result}");
                         }
                         else if (item.IsFile && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
                         {
-                            // Non-image file drag: create temp copy with original filename for consistency with click-to-paste
-                            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaDrag");
-                            try { if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, recursive: true); } catch { }
-                            System.IO.Directory.CreateDirectory(tempDir);
-                            var fileName = !string.IsNullOrEmpty(item.FileName) ? item.FileName : System.IO.Path.GetFileName(item.FilePath);
-                            var sourceExt = System.IO.Path.GetExtension(item.FilePath);
-                            if (!string.IsNullOrEmpty(sourceExt) && !fileName.EndsWith(sourceExt, System.StringComparison.OrdinalIgnoreCase))
-                                fileName += sourceExt;
-                            tempFilePath = System.IO.Path.Combine(tempDir, fileName);
-                            System.IO.File.Copy(item.FilePath, tempFilePath, overwrite: true);
+                            // Non-image file drag: use ORIGINAL file path (more compatible with target apps)
                             var data = new System.Windows.DataObject();
                             data.SetData("ClipDropShelfOrigin", item);
-                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { tempFilePath });
-                            Log($"DragFile: {fileName}");
+                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { item.FilePath });
+                            Log($"DragFile: {System.IO.Path.GetFileName(item.FilePath)}");
                             var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
                             Log($"DragEnd: result={result}");
                         }

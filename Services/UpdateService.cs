@@ -101,6 +101,15 @@ namespace ClipDropPro.Services
             // Return cached result if less than 1 hour old (avoids hitting network)
             if (_cachedInfo != null && (DateTime.UtcNow - _lastCheckTime) < TimeSpan.FromHours(1))
             {
+                // Sanity check: if the cached "latest" is not actually newer than what we're running now,
+                // the cache is stale (e.g. user updated manually). Override to "no update available".
+                if (!IsNewerVersion(_cachedInfo.LatestVersion, _currentVersion))
+                {
+                    Logger.Write($"[UpdateService] Cache stale (cached latest={_cachedInfo.LatestVersion} not newer than current={_currentVersion}) - refreshing");
+                    _cachedInfo.IsUpdateAvailable = false;
+                    if (!string.IsNullOrEmpty(_cachedInfo.LatestVersion))
+                        _cachedInfo.LatestVersion = _currentVersion;
+                }
                 Logger.Write($"[UpdateService] Returning cached update info (age: {(DateTime.UtcNow - _lastCheckTime).TotalMinutes:F0} min)");
                 return _cachedInfo;
             }

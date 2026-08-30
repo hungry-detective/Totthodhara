@@ -130,6 +130,18 @@ namespace ClipDropPro
             }
             catch (Exception ex) { Log($"Orphaned download cleanup error: {ex.Message}"); }
 
+            // Also clean up the old drag-temp folder (no longer used since v1.4.3)
+            try
+            {
+                string dragTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaDrag");
+                if (System.IO.Directory.Exists(dragTemp))
+                {
+                    System.IO.Directory.Delete(dragTemp, recursive: true);
+                    Log("Cleaned up old TotthodharaDrag temp folder");
+                }
+            }
+            catch (Exception ex) { Log($"Drag temp cleanup error: {ex.Message}"); }
+
             _host = Host.CreateDefaultBuilder(e.Args)
                 .ConfigureServices((context, services) =>
                 {
