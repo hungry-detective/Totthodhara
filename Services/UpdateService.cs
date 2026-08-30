@@ -18,12 +18,17 @@ namespace ClipDropPro.Services
         private const string GitHubOwner = "hungry-detective";
         private const string GitHubRepo = "Totthodhara";
         private const string ReleasesApiUrl = $"https://api.github.com/repos/{GitHubOwner}/{GitHubRepo}/releases/latest";
+        // Atom feed has no rate limit (public, no auth needed)
+        private const string ReleasesAtomUrl = $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases.atom";
         private const int MaxRetries = 3;
         private const int BufferSize = 65536; // 64KB for faster downloads
 
         private static readonly HttpClient _httpClient;
         private static readonly string _currentVersion;
         private static readonly string _bakDir;
+        private static readonly string _cacheDir;
+        private static DateTime _lastCheckTime = DateTime.MinValue;
+        private static UpdateInfo _cachedInfo;
 
         private string _pendingUpdateDir = "";
         private string _pendingExeName = "";
@@ -34,6 +39,9 @@ namespace ClipDropPro.Services
             _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Totthodhara-Updater");
             _currentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
             _bakDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "update_backup");
+            _cacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "update_cache");
+            Directory.CreateDirectory(_cacheDir);
+            LoadCachedResult();
         }
 
         public string GetCurrentVersion() => _currentVersion;
@@ -90,50 +98,316 @@ namespace ClipDropPro.Services
 
         public async Task<UpdateInfo> CheckForUpdateAsync()
         {
+            // Return cached result if less than 1 hour old (avoids hitting network)
+            if (_cachedInfo != null && (DateTime.UtcNow - _lastCheckTime) < TimeSpan.FromHours(1))
+            {
+                Logger.Write($"[UpdateService] Returning cached update info (age: {(DateTime.UtcNow - _lastCheckTime).TotalMinutes:F0} min)");
+                return _cachedInfo;
+            }
+
+            // Try GitHub Atom feed first (no rate limit), fall back to API
+            try
+            {
+                var atomInfo = await TryFetchFromAtomAsync();
+                if (atomInfo != null)
+                {
+                    _cachedInfo = atomInfo;
+                    _lastCheckTime = DateTime.UtcNow;
+                    SaveCachedResult(atomInfo);
+                    return atomInfo;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"[UpdateService] Atom feed failed: {ex.Message}");
+            }
+
+            // Fallback to API
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
                 var response = await _httpClient.GetAsync(ReleasesApiUrl, cts.Token);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                {
+                    Logger.Write("[UpdateService] GitHub API rate limit hit (403)");
+                    if (_cachedInfo != null)
+                    {
+                        _lastCheckTime = DateTime.UtcNow;
+                        return _cachedInfo;
+                    }
+                    return new UpdateInfo
+                    {
+                        IsUpdateAvailable = false,
+                        CurrentVersion = _currentVersion,
+                        ErrorMessage = "GitHub API rate limit exceeded and no cached result available. Please wait an hour and try again."
+                    };
+                }
+
                 response.EnsureSuccessStatusCode();
 
                 var json = await response.Content.ReadAsStringAsync(cts.Token);
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
-                string latestVersion = root.TryGetProperty("tag_name", out var tagProp)
+                string latestVersionRaw = root.TryGetProperty("tag_name", out var tagProp)
                     ? tagProp.GetString()?.TrimStart('v', 'V') ?? ""
                     : "";
+
+                string latestVersion = latestVersionRaw.Split('-', '+')[0].Trim();
 
                 string releaseNotes = root.TryGetProperty("body", out var bodyProp)
                     ? bodyProp.GetString() ?? ""
                     : "";
 
+                DateTime? publishedAt = null;
+                if (root.TryGetProperty("published_at", out var pubProp) &&
+                    DateTime.TryParse(pubProp.GetString(), out var pub))
+                {
+                    publishedAt = pub.ToUniversalTime();
+                }
+
                 string downloadUrl = SelectBestAsset(root);
                 string sha256 = ExtractSha256FromNotes(releaseNotes);
 
-                // Also check for .sha256 asset
                 if (string.IsNullOrEmpty(sha256))
                     sha256 = await FindSha256Asset(root, downloadUrl, cts.Token);
 
-                bool isUpdateAvailable = !string.IsNullOrEmpty(latestVersion) &&
-                                         Version.TryParse(latestVersion, out var latest) &&
-                                         Version.TryParse(_currentVersion, out var current) &&
-                                         latest > current;
+                bool isUpdateAvailable = IsNewerVersion(latestVersion, _currentVersion);
 
-                return new UpdateInfo
+                Logger.Write($"[UpdateService] API: Current: {_currentVersion}, Latest: {latestVersion}, Update available: {isUpdateAvailable}");
+
+                var info = new UpdateInfo
                 {
                     LatestVersion = latestVersion,
+                    CurrentVersion = _currentVersion,
                     DownloadUrl = downloadUrl,
                     ReleaseNotes = releaseNotes,
                     IsUpdateAvailable = isUpdateAvailable,
-                    ExpectedSha256 = sha256
+                    ExpectedSha256 = sha256,
+                    PublishedAt = publishedAt
                 };
+
+                _cachedInfo = info;
+                _lastCheckTime = DateTime.UtcNow;
+                SaveCachedResult(info);
+                return info;
             }
             catch (Exception ex)
             {
                 Logger.Write($"[UpdateService] Check failed: {ex.Message}");
-                return new UpdateInfo { IsUpdateAvailable = false };
+                if (_cachedInfo != null)
+                {
+                    Logger.Write("[UpdateService] Returning stale cached result due to error");
+                    return _cachedInfo;
+                }
+                return new UpdateInfo { IsUpdateAvailable = false, CurrentVersion = _currentVersion, ErrorMessage = ex.Message };
             }
+        }
+
+        private async Task<UpdateInfo> TryFetchFromAtomAsync()
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                var response = await _httpClient.GetAsync(ReleasesAtomUrl, cts.Token);
+                response.EnsureSuccessStatusCode();
+
+                var xml = await response.Content.ReadAsStringAsync(cts.Token);
+                if (string.IsNullOrWhiteSpace(xml)) return null;
+
+                var doc = new System.Xml.XmlDocument();
+                doc.LoadXml(xml);
+
+                var nsmgr = new System.Xml.XmlNamespaceManager(doc.NameTable);
+                nsmgr.AddNamespace("atom", "http://www.w3.org/2005/Atom");
+
+                // Get first <entry> which is the latest release
+                var entry = doc.SelectSingleNode("//atom:entry", nsmgr);
+                if (entry == null) return null;
+
+                // Title format: "Release v1.2.0" — extract version
+                var titleNode = entry.SelectSingleNode("atom:title", nsmgr);
+                string title = titleNode?.InnerText ?? "";
+                string latestVersion = "";
+                var match = System.Text.RegularExpressions.Regex.Match(title, @"v?(\d+(?:\.\d+){0,3})");
+                if (match.Success) latestVersion = match.Groups[1].Value;
+                if (string.IsNullOrEmpty(latestVersion)) return null;
+
+                // Published date
+                DateTime? publishedAt = null;
+                var updatedNode = entry.SelectSingleNode("atom:updated", nsmgr);
+                if (updatedNode != null && DateTime.TryParse(updatedNode.InnerText, out var pub))
+                    publishedAt = pub.ToUniversalTime();
+
+                // Link to release page (for downloads if needed)
+                string releasePageUrl = "";
+                var linkNode = entry.SelectSingleNode("atom:link", nsmgr);
+                if (linkNode != null)
+                {
+                    string href = linkNode.Attributes?["href"]?.Value ?? "";
+                    // Convert relative URL to absolute
+                    if (href.StartsWith("/"))
+                        releasePageUrl = $"https://github.com{href}";
+                    else if (href.StartsWith("http"))
+                        releasePageUrl = href;
+                    else
+                        releasePageUrl = href;
+                }
+
+                // Use the tag-based asset URL pattern (GitHub provides direct download links)
+                string downloadUrl = $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases/download/v{latestVersion}/";
+                string[] assetCandidates = Array.Empty<string>();
+
+                // Try to fetch the release page HTML and extract actual asset download URLs
+                if (!string.IsNullOrEmpty(releasePageUrl))
+                {
+                    try
+                    {
+                        Logger.Write($"[UpdateService] Fetching release page: {releasePageUrl}");
+                        var pageResp = await _httpClient.GetAsync(releasePageUrl, cts.Token);
+                        if (pageResp.IsSuccessStatusCode)
+                        {
+                            var html = await pageResp.Content.ReadAsStringAsync(cts.Token);
+                            // Find asset download URLs in either absolute or relative form
+                            var patterns = new[] {
+                                @"https://github\.com/" + System.Text.RegularExpressions.Regex.Escape(GitHubOwner) + "/" + System.Text.RegularExpressions.Regex.Escape(GitHubRepo) + @"/releases/download/[^\s""]+",
+                                @"href=""(/[^""]*releases/download/[^""]+)"""
+                            };
+                            var found = new System.Collections.Generic.List<string>();
+                            foreach (var pattern in patterns)
+                            {
+                                var matches = System.Text.RegularExpressions.Regex.Matches(html, pattern);
+                                foreach (System.Text.RegularExpressions.Match m in matches)
+                                {
+                                    string url2 = m.Value;
+                                    // Extract just the URL from href="..." form
+                                    var hrefMatch = System.Text.RegularExpressions.Regex.Match(url2, @"href=""([^""]+)""");
+                                    if (hrefMatch.Success)
+                                        url2 = "https://github.com" + hrefMatch.Groups[1].Value;
+                                    url2 = url2.Replace("&amp;", "&");
+                                    if (!found.Contains(url2) && !url2.Contains(".sig") && !url2.Contains(".sha256"))
+                                        found.Add(url2);
+                                }
+                            }
+                            if (found.Count > 0)
+                            {
+                                assetCandidates = found.ToArray();
+                                downloadUrl = found[0];
+                                Logger.Write($"[UpdateService] Found {found.Count} asset URLs from release page");
+                            }
+                            else
+                            {
+                                Logger.Write("[UpdateService] No asset URLs found in release page HTML");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Write($"[UpdateService] Release page fetch failed: {ex.Message}");
+                    }
+                }
+
+                // Fallback asset candidates if HTML parsing failed
+                if (assetCandidates.Length == 0)
+                {
+                    assetCandidates = new[] {
+                        // Most common portable exe variant
+                        $"Totthodhara-v{latestVersion}-portable.exe",
+                        $"Totthodhara-v{latestVersion}-win-x86.exe",
+                        $"Totthodhara-v{latestVersion}-win-x86.zip",
+                        $"Totthodhara-{latestVersion}-portable.exe",
+                        $"Totthodhara-{latestVersion}-win-x86.exe",
+                        $"Totthodhara_{latestVersion}_portable.exe",
+                        $"Totthodhara_{latestVersion}_win-x86.exe",
+                        $"Totthodhara_{latestVersion}_win-x86.zip",
+                        $"Totthodhara-v{latestVersion}.zip",
+                        $"Totthodhara-{latestVersion}-win-x86.zip",
+                        $"Totthodhara-{latestVersion}.zip",
+                        $"Totthodhara.exe"
+                    };
+                    downloadUrl = $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases/download/v{latestVersion}/{assetCandidates[0]}";
+                }
+
+                bool isUpdateAvailable = IsNewerVersion(latestVersion, _currentVersion);
+
+                Logger.Write($"[UpdateService] Atom: Current: {_currentVersion}, Latest: {latestVersion}, Update available: {isUpdateAvailable}");
+
+                return new UpdateInfo
+                {
+                    LatestVersion = latestVersion,
+                    CurrentVersion = _currentVersion,
+                    DownloadUrl = downloadUrl,
+                    ReleaseNotes = $"Latest release: {title}\n\nDownload from: {releasePageUrl}",
+                    IsUpdateAvailable = isUpdateAvailable,
+                    PublishedAt = publishedAt,
+                    AssetCandidates = assetCandidates,
+                    ReleasePageUrl = releasePageUrl
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Write($"[UpdateService] Atom feed parse failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static void LoadCachedResult()
+        {
+            try
+            {
+                var path = Path.Combine(_cacheDir, "last_check.json");
+                if (!File.Exists(path)) return;
+                var json = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(json)) return;
+                _cachedInfo = System.Text.Json.JsonSerializer.Deserialize<UpdateInfo>(json);
+                var tsPath = Path.Combine(_cacheDir, "last_check_time.txt");
+                if (File.Exists(tsPath) && DateTime.TryParse(File.ReadAllText(tsPath), out var ts))
+                    _lastCheckTime = ts.ToUniversalTime();
+            }
+            catch { }
+        }
+
+        private static void SaveCachedResult(UpdateInfo info)
+        {
+            try
+            {
+                var path = Path.Combine(_cacheDir, "last_check.json");
+                File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(info));
+                File.WriteAllText(Path.Combine(_cacheDir, "last_check_time.txt"), DateTime.UtcNow.ToString("O"));
+            }
+            catch { }
+        }
+
+        private static bool IsNewerVersion(string latest, string current)
+        {
+            if (string.IsNullOrEmpty(latest)) return false;
+
+            // Parse with up to 4 segments (1.2 vs 1.2.0 vs 1.2.0.1)
+            int[] latestParts = ParseVersion(latest);
+            int[] currentParts = ParseVersion(current);
+
+            for (int i = 0; i < 4; i++)
+            {
+                int l = i < latestParts.Length ? latestParts[i] : 0;
+                int c = i < currentParts.Length ? currentParts[i] : 0;
+                if (l > c) return true;
+                if (l < c) return false;
+            }
+            return false; // Equal
+        }
+
+        private static int[] ParseVersion(string version)
+        {
+            var result = new System.Collections.Generic.List<int>();
+            foreach (var part in version.Split('.'))
+            {
+                if (int.TryParse(part, out int n))
+                    result.Add(n);
+                else
+                    result.Add(0);
+            }
+            return result.ToArray();
         }
 
         private static string ExtractSha256FromNotes(string notes)
@@ -219,11 +493,13 @@ namespace ClipDropPro.Services
             return firstUrl;
         }
 
-        public async Task<bool> DownloadAndInstallAsync(UpdateInfo info, IProgress<double> progress = null, CancellationToken cancellationToken = default)
+        public async Task<bool> DownloadAndInstallAsync(UpdateInfo info, IProgress<double> progress = null, CancellationToken cancellationToken = default, IProgress<string> status = null)
         {
+            void Report(string msg) { status?.Report(msg); Logger.Write($"[UpdateService] {msg}"); }
             if (info == null || string.IsNullOrEmpty(info.DownloadUrl))
             {
                 Logger.Write("[UpdateService] DownloadAndInstall: no download URL");
+                Report("No download URL available");
                 return false;
             }
 
@@ -234,14 +510,47 @@ namespace ClipDropPro.Services
             {
                 Directory.CreateDirectory(tempRoot);
 
-                string fileName = GetFileNameFromUrl(info.DownloadUrl);
-                if (string.IsNullOrEmpty(fileName))
-                    fileName = info.DownloadUrl.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? "Totthodhara.exe" : "update.zip";
+                // Try the primary URL first, then asset candidates
+                var urlsToTry = new System.Collections.Generic.List<string> { info.DownloadUrl };
+                if (info.AssetCandidates != null)
+                {
+                    foreach (var candidate in info.AssetCandidates)
+                    {
+                        // If candidate is a full URL (from HTML scrape), use directly
+                        // Otherwise treat as asset name and prepend base URL
+                        string fullUrl = candidate.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? candidate
+                            : $"https://github.com/{GitHubOwner}/{GitHubRepo}/releases/download/v{info.LatestVersion}/{candidate}";
+                        if (!urlsToTry.Contains(fullUrl))
+                            urlsToTry.Add(fullUrl);
+                    }
+                }
 
-                downloadPath = Path.Combine(tempRoot, fileName);
+                Report($"Trying {urlsToTry.Count} download source(s)...");
+                Logger.Write($"[UpdateService] URLs to try ({urlsToTry.Count}):");
+                foreach (var u in urlsToTry) Logger.Write($"  - {u}");
 
-                // Download with retry + resume
-                bool downloaded = await DownloadWithRetryAndResume(info.DownloadUrl, downloadPath, info.ExpectedSha256, progress, cancellationToken);
+                bool downloaded = false;
+                string fileName = "";
+                foreach (var url in urlsToTry)
+                {
+                    if (cancellationToken.IsCancellationRequested) break;
+                    fileName = GetFileNameFromUrl(url);
+                    if (string.IsNullOrEmpty(fileName))
+                        fileName = url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? "Totthodhara.exe" : "update.zip";
+
+                    downloadPath = Path.Combine(tempRoot, fileName);
+                    Report($"Downloading: {fileName}");
+                    Logger.Write($"[UpdateService] Trying download: {url}");
+                    downloaded = await DownloadWithRetryAndResume(url, downloadPath, info.ExpectedSha256, progress, cancellationToken, status);
+                    if (downloaded)
+                    {
+                        Report("Download complete");
+                        break;
+                    }
+                    Report($"Source {fileName} unavailable, trying next...");
+                }
+
                 if (!downloaded)
                 {
                     TryCleanup(tempRoot);
@@ -313,8 +622,9 @@ namespace ClipDropPro.Services
             }
         }
 
-        private async Task<bool> DownloadWithRetryAndResume(string url, string downloadPath, string expectedSha256, IProgress<double> progress, CancellationToken ct)
+        private async Task<bool> DownloadWithRetryAndResume(string url, string downloadPath, string expectedSha256, IProgress<double> progress, CancellationToken ct, IProgress<string> status = null)
         {
+            void Report(string msg) { status?.Report(msg); Logger.Write($"[UpdateService] {msg}"); }
             for (int attempt = 0; attempt <= MaxRetries; attempt++)
             {
                 if (ct.IsCancellationRequested) return false;
@@ -329,6 +639,19 @@ namespace ClipDropPro.Services
 
                 try
                 {
+                    // Quick HEAD probe to validate URL is reachable before downloading
+                    Report($"Checking: {Path.GetFileName(url)}");
+                    using (var probe = new HttpRequestMessage(HttpMethod.Head, url))
+                    using (var probeResp = await _httpClient.SendAsync(probe, HttpCompletionOption.ResponseHeadersRead, ct))
+                    {
+                        if (!probeResp.IsSuccessStatusCode)
+                        {
+                            Report($"  HTTP {(int)probeResp.StatusCode} — skipping");
+                            Logger.Write($"[UpdateService] HEAD probe failed for {url}: HTTP {(int)probeResp.StatusCode}");
+                            return false; // Skip this URL entirely (no retries on 404)
+                        }
+                        Logger.Write($"[UpdateService] HEAD probe OK for {url} ({probeResp.Content.Headers.ContentLength ?? -1} bytes)");
+                    }
                     long existingBytes = 0;
                     if (attempt > 0 && File.Exists(downloadPath))
                     {

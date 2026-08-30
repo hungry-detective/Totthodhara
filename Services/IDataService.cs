@@ -14,6 +14,7 @@ namespace ClipDropPro.Services
         Task UpdateItemAsync(ClipboardItem item);
         Task DeleteItemAsync(ClipboardItem item);
         Task DeleteAllExceptPinnedAsync();
+        Task DeleteWelcomeItemsAsync();
         Task TrimOldestUnpinnedAsync(int maxItems);
     }
 }

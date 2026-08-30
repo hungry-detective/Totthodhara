@@ -130,7 +130,16 @@ namespace ClipDropPro
                     using var cropped = window != null
                         ? window.CropImageTransparency(sourceBmp)
                         : new System.Drawing.Bitmap(sourceBmp);
-                    using var resized = new System.Drawing.Bitmap(cropped, 32, 32);
+                    using var resized = new System.Drawing.Bitmap(32, 32);
+                    using (var g = System.Drawing.Graphics.FromImage(resized))
+                    {
+                        g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                        g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                        g.Clear(System.Drawing.Color.Transparent);
+                        g.DrawImage(cropped, 0, 0, 32, 32);
+                    }
                     IntPtr hIcon = resized.GetHicon();
                     try
                     {
@@ -191,7 +200,19 @@ namespace ClipDropPro
                 if (maxX == -1) return new System.Drawing.Bitmap(source); // Empty
                 int width = maxX - minX + 1;
                 int height = maxY - minY + 1;
-                return source.Clone(new System.Drawing.Rectangle(minX, minY, width, height), source.PixelFormat);
+                var cropped = source.Clone(new System.Drawing.Rectangle(minX, minY, width, height), source.PixelFormat);
+
+                // Pad to square so resize doesn't stretch (preserve aspect ratio)
+                int size = Math.Max(width, height);
+                var square = new System.Drawing.Bitmap(size, size);
+                using (var g = System.Drawing.Graphics.FromImage(square))
+                {
+                    g.Clear(System.Drawing.Color.Transparent);
+                    int xOff = (size - width) / 2;
+                    int yOff = (size - height) / 2;
+                    g.DrawImage(cropped, xOff, yOff, width, height);
+                }
+                return square;
             } catch { return new System.Drawing.Bitmap(source); }
         }
 
@@ -463,17 +484,13 @@ namespace ClipDropPro
                 case "Small": baseHeight = 32; capsuleRadius = 16; capsuleMarginV = 0; SetItemSizes(16, 2, 4, 2, 12, 28); break;
                 case "Large": baseHeight = 50; capsuleRadius = 25; capsuleMarginV = 0; SetItemSizes(28, 5, 7, 2, 15, 38); break;
                 case "Medium":
-                default: baseHeight = 40; capsuleRadius = 20; capsuleMarginV = 0; SetItemSizes(22, 3, 5, 2, 14, 34); break;
+                default: baseHeight = 34; capsuleRadius = 17; capsuleMarginV = 0; SetItemSizes(18, 2, 4, 2, 13, 32); break;
             }
 
             Height = baseHeight;
             if (CapsuleBorder != null)
             {
-                bool shelfTop = _viewModel.ShelfPosition == "Top";
-                if (shelfTop)
-                    CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(0, 0, capsuleRadius, capsuleRadius);
-                else
-                    CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(capsuleRadius, capsuleRadius, 0, 0);
+                CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(capsuleRadius);
                 CapsuleBorder.Margin = new System.Windows.Thickness(0, capsuleMarginV, 0, capsuleMarginV);
             }
 
@@ -1141,6 +1158,7 @@ namespace ClipDropPro
                 SetResource("TextColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
                 SetResource("IconColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
                 SetResource("CardBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)));
+                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x10, 0xFF, 0xFF, 0xFF)));
                 SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)));
                 SetResource("BorderColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)));
                 SetResource("AccentColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF)));
@@ -1150,6 +1168,16 @@ namespace ClipDropPro
                 SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x00, 0x00, 0x00, 0x00)));
                 SetResource("ShadowOpacity", 0.0d);   // No shadow — bar is invisible
                 SetResource("ShadowColor", System.Windows.Media.Colors.Black);
+
+                // Selected gradient for transparent mode
+                var transparentGradient = new System.Windows.Media.LinearGradientBrush(
+                    System.Windows.Media.Colors.Transparent, System.Windows.Media.Colors.Transparent,
+                    new System.Windows.Point(0, 0), new System.Windows.Point(1, 0));
+                transparentGradient.GradientStops.Clear();
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0xB3, 0x60, 0xCD, 0xFF), 0.0));
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x40, 0x60, 0xCD, 0xFF), 0.6));
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF), 1.0));
+                SetResource("SelectedItemGradient", transparentGradient);
             }
             else
             {
@@ -1162,19 +1190,33 @@ namespace ClipDropPro
                 }
 
                 // Solid colors — no acrylic/blur in either mode
-                var shelfBrush = new System.Windows.Media.SolidColorBrush(isLightTheme
-                    ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
-                    : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14));
+                // Dark mode uses a subtle vertical gradient for depth instead of flat #141414
+                System.Windows.Media.Brush shelfBrush;
+                if (isLightTheme)
+                {
+                    shelfBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
+                }
+                else
+                {
+                    var darkGrad = new System.Windows.Media.LinearGradientBrush(
+                        System.Windows.Media.Color.FromRgb(0x12, 0x12, 0x12),
+                        System.Windows.Media.Color.FromRgb(0x06, 0x06, 0x06),
+                        new System.Windows.Point(0, 0),
+                        new System.Windows.Point(0, 1));
+                    shelfBrush = darkGrad;
+                }
 
                 var textColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
                 var iconColor = new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22) : System.Windows.Media.Colors.White);
 
+                // Stronger card contrast in dark mode for better visual hierarchy
+                // Card is nearly invisible — blends with shelf for ultra-minimal look
                 var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                    ? System.Windows.Media.Color.FromArgb(0x1A, 0x00, 0x00, 0x00)
-                    : System.Windows.Media.Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF));
+                    ? System.Windows.Media.Color.FromArgb(0x10, 0x00, 0x00, 0x00)
+                    : System.Windows.Media.Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF));
                 var controlBg = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00)
-                    : System.Windows.Media.Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF));
+                    : System.Windows.Media.Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF));
                 var borderColor = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(30, 0, 0, 0)
                     : System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
@@ -1195,12 +1237,34 @@ namespace ClipDropPro
                 SetResource("TextColor", textColor);
                 SetResource("IconColor", iconColor);
                 SetResource("CardBg", cardBg);
+                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
+                    isLightTheme ? (byte)0x08 : (byte)0x05, 0xFF, 0xFF, 0xFF)));
                 SetResource("ControlBg", controlBg);
                 SetResource("BorderColor", borderColor);
                 SetResource("MenuBg", menuBg);
                 SetResource("ToolTipBg", tooltipBg);
                 SetResource("AccentColor", accentColor);
                 SetResource("AccentColorDim", accentColorDim);
+
+                // Selected item gradient: left = accent (lighter), right = card/shelf color (blends in)
+                System.Windows.Media.Color accentRgb = ((System.Windows.Media.SolidColorBrush)accentColor).Color;
+                var selectedGradient = new System.Windows.Media.LinearGradientBrush(
+                    System.Windows.Media.Colors.Transparent,  // placeholder
+                    System.Windows.Media.Colors.Transparent,
+                    new System.Windows.Point(0, 0),
+                    new System.Windows.Point(1, 0));
+                selectedGradient.GradientStops.Clear();
+                // Left side: accent color at ~70% opacity
+                var accentAtStop = System.Windows.Media.Color.FromArgb(0xB3, accentRgb.R, accentRgb.G, accentRgb.B);
+                selectedGradient.GradientStops.Add(new System.Windows.Media.GradientStop(accentAtStop, 0.0));
+                // Mid: fade
+                var accentFade = System.Windows.Media.Color.FromArgb(0x40, accentRgb.R, accentRgb.G, accentRgb.B);
+                selectedGradient.GradientStops.Add(new System.Windows.Media.GradientStop(accentFade, 0.6));
+                // Right side: blends into card background (no color change)
+                var cardRgb = ((System.Windows.Media.SolidColorBrush)cardBg).Color;
+                selectedGradient.GradientStops.Add(new System.Windows.Media.GradientStop(cardRgb, 1.0));
+                SetResource("SelectedItemGradient", selectedGradient);
+
                 SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF)
                     : System.Windows.Media.Color.FromRgb(0x14, 0x14, 0x14)));
@@ -1273,12 +1337,25 @@ namespace ClipDropPro
 
                 SetResource("AppBackground", shelfBrush);
                 SetResource("CardBg", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomCardColor)));
+                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomCardColor)));
                 SetResource("ControlBg", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomControlBgColor)));
                 SetResource("AccentColor", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomAccentColor)));
                 SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(bgColor));
                 SetResource("BorderColor", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomBorderColor)));
                 SetResource("TextColor", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomTextColor)));
                 SetResource("IconColor", new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomIconColor)));
+
+                // Build custom selected gradient
+                var accentC = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomAccentColor);
+                var cardC = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(svm.CustomCardColor);
+                var customGrad = new System.Windows.Media.LinearGradientBrush(
+                    System.Windows.Media.Colors.Transparent, System.Windows.Media.Colors.Transparent,
+                    new System.Windows.Point(0, 0), new System.Windows.Point(1, 0));
+                customGrad.GradientStops.Clear();
+                customGrad.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0xB3, accentC.R, accentC.G, accentC.B), 0.0));
+                customGrad.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x40, accentC.R, accentC.G, accentC.B), 0.6));
+                customGrad.GradientStops.Add(new System.Windows.Media.GradientStop(cardC, 1.0));
+                SetResource("SelectedItemGradient", customGrad);
 
                 if (ItemsHost != null)
                     ItemsHost.Items.Refresh();
@@ -2063,82 +2140,311 @@ namespace ClipDropPro
 
             if (info.IsUpdateAvailable)
             {
-                var result = System.Windows.MessageBox.Show(
-                    $"A new version v{info.LatestVersion} is available!\n\nCurrent version: v{updateService.GetCurrentVersion()}\n\n{(string.IsNullOrEmpty(info.ReleaseNotes) ? "" : $"Release notes:\n{info.ReleaseNotes}\n\n")}Download and install now? The app will restart automatically.",
+                var result = ThemedMessageBox.Show(
+                    this,
                     "Update Available",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
+                    $"A new version v{info.LatestVersion} is available!\n\nCurrent: v{updateService.GetCurrentVersion()}\n\nDownload and install now?",
+                    ThemedMessageBox.Buttons.YesNo,
+                    ThemedMessageBox.IconType.Info);
 
-                if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(info.DownloadUrl))
+                if (result == ThemedMessageBox.Result.Yes && !string.IsNullOrEmpty(info.DownloadUrl))
                 {
                     await RunUpdateWithProgressAsync(updateService, info);
                 }
             }
+            else if (!string.IsNullOrEmpty(info.ErrorMessage))
+            {
+                ThemedMessageBox.Show(
+                    this,
+                    "Update Check Failed",
+                    $"Could not check for updates.\n\nError: {info.ErrorMessage}",
+                    ThemedMessageBox.Buttons.OK,
+                    ThemedMessageBox.IconType.Warning);
+            }
             else
             {
-                System.Windows.MessageBox.Show(
-                    $"You are running the latest version (v{updateService.GetCurrentVersion()}).",
-                    "No Updates Available",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                string detail;
+                if (!string.IsNullOrEmpty(info.LatestVersion) && info.LatestVersion != updateService.GetCurrentVersion())
+                    detail = $"Your version: v{updateService.GetCurrentVersion()} (newer than published)\nPublished: v{info.LatestVersion}";
+                else
+                    detail = $"Totthodhara v{updateService.GetCurrentVersion()} is the latest version.";
+                if (info.PublishedAt.HasValue)
+                    detail += $"\nLast checked: {info.PublishedAt.Value.ToLocalTime():yyyy-MM-dd HH:mm}";
+                ThemedMessageBox.Show(
+                    this,
+                    "You're up to date",
+                    detail,
+                    ThemedMessageBox.Buttons.OK,
+                    ThemedMessageBox.IconType.Info);
             }
         }
 
         private async Task RunUpdateWithProgressAsync(ClipDropPro.Services.IUpdateService updateService, ClipDropPro.Services.UpdateInfo info)
         {
-            // Build a minimal progress window (no XAML file needed)
-            var progressBar = new System.Windows.Controls.ProgressBar
+            var accent = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["AccentColor"];
+            var textColor = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black;
+            var windowBg = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["WindowBg"] ?? System.Windows.Media.Brushes.White;
+            var borderColor = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["BorderColor"] ?? System.Windows.Media.Brushes.Gray;
+
+            // Outer grid: title bar + content
+            var outerGrid = new System.Windows.Controls.Grid();
+            outerGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(32) });
+            outerGrid.RowDefinitions.Add(new System.Windows.Controls.RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            // Custom draggable title bar
+            var titleBar = new System.Windows.Controls.Border
             {
-                Minimum = 0, Maximum = 100, Height = 14, Margin = new Thickness(16, 8, 16, 0),
-                IsIndeterminate = false
+                Background = windowBg,
+                BorderBrush = borderColor,
+                BorderThickness = new Thickness(0, 0, 0, 1)
             };
-            var statusText = new System.Windows.Controls.TextBlock
+            var titleBarGrid = new System.Windows.Controls.Grid();
+            titleBarGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            titleBarGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+            titleBarGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+            titleBarGrid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = GridLength.Auto });
+            titleBarGrid.Children.Add(new System.Windows.Controls.TextBlock
             {
-                Text = "Downloading 0%...", Margin = new Thickness(16, 8, 16, 0),
-                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
-                FontSize = 12
+                Text = $"Updating Totthodhara",
+                Foreground = textColor,
+                FontSize = 12,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0)
+            });
+            // Minimize button
+            var btnMin = new System.Windows.Controls.Button
+            {
+                Content = "\uE921",
+                FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+                FontSize = 10,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = textColor,
+                BorderThickness = new Thickness(0),
+                Width = 32, Height = 32,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Minimize"
             };
-            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(0, 16, 0, 16) };
+            System.Windows.Controls.Grid.SetColumn(btnMin, 1);
+            // Close button
+            var btnClose = new System.Windows.Controls.Button
+            {
+                Content = "\uE8BB",
+                FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+                FontSize = 10,
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = textColor,
+                BorderThickness = new Thickness(0),
+                Width = 32, Height = 32,
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Close (cancels download)"
+            };
+            System.Windows.Controls.Grid.SetColumn(btnClose, 2);
+            titleBarGrid.Children.Add(btnMin);
+            titleBarGrid.Children.Add(btnClose);
+            titleBar.Child = titleBarGrid;
+            System.Windows.Controls.Grid.SetRow(titleBar, 0);
+            outerGrid.Children.Add(titleBar);
+
+            // Body
+            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(20, 16, 20, 16) };
+            System.Windows.Controls.Grid.SetRow(panel, 1);
+
             panel.Children.Add(new System.Windows.Controls.TextBlock
             {
                 Text = $"Downloading v{info.LatestVersion}...",
-                FontWeight = FontWeights.SemiBold, Margin = new Thickness(16, 0, 16, 0),
-                Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["TextColor"] ?? System.Windows.Media.Brushes.Black,
-                FontSize = 13
+                FontWeight = FontWeights.SemiBold,
+                Foreground = textColor,
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 0, 8)
             });
+
+            var statusText = new System.Windows.Controls.TextBlock
+            {
+                Text = "Downloading 0%...",
+                Foreground = textColor,
+                FontSize = 12,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
             panel.Children.Add(statusText);
+
+            var progressBar = new System.Windows.Controls.ProgressBar
+            {
+                Minimum = 0, Maximum = 100, Height = 14,
+                IsIndeterminate = false,
+                Value = 0
+            };
             panel.Children.Add(progressBar);
+
+            // Buttons row
+            var btnRow = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+                Margin = new Thickness(0, 12, 0, 0)
+            };
+
+            // Cancel button
+            var cancelBtn = new System.Windows.Controls.Button
+            {
+                Content = "Cancel",
+                Padding = new Thickness(14, 6, 14, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = textColor,
+                BorderBrush = borderColor,
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                MinWidth = 70
+            };
+            System.Windows.Controls.ControlTemplate secondaryTpl = null;
+            {
+                var tpl = new System.Windows.Controls.ControlTemplate(typeof(System.Windows.Controls.Button));
+                var bd = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+                bd.SetValue(System.Windows.Controls.Border.BackgroundProperty, new System.Windows.TemplateBindingExtension(System.Windows.Controls.Button.BackgroundProperty));
+                bd.SetValue(System.Windows.Controls.Border.BorderBrushProperty, new System.Windows.TemplateBindingExtension(System.Windows.Controls.Button.BorderBrushProperty));
+                bd.SetValue(System.Windows.Controls.Border.BorderThicknessProperty, new System.Windows.TemplateBindingExtension(System.Windows.Controls.Button.BorderThicknessProperty));
+                bd.SetValue(System.Windows.Controls.Border.CornerRadiusProperty, new System.Windows.CornerRadius(6));
+                bd.SetValue(System.Windows.Controls.Border.PaddingProperty, new System.Windows.TemplateBindingExtension(System.Windows.Controls.Button.PaddingProperty));
+                var cp = new System.Windows.FrameworkElementFactory(typeof(System.Windows.Controls.ContentPresenter));
+                cp.SetValue(System.Windows.Controls.ContentPresenter.HorizontalAlignmentProperty, System.Windows.HorizontalAlignment.Center);
+                cp.SetValue(System.Windows.Controls.ContentPresenter.VerticalAlignmentProperty, System.Windows.VerticalAlignment.Center);
+                bd.AppendChild(cp);
+                tpl.VisualTree = bd;
+                secondaryTpl = tpl;
+            }
+            cancelBtn.Template = secondaryTpl;
+
+            // Pause/Resume button
+            var pauseBtn = new System.Windows.Controls.Button
+            {
+                Content = "Pause",
+                Padding = new Thickness(14, 6, 14, 6),
+                Margin = new Thickness(0, 0, 8, 0),
+                Background = System.Windows.Media.Brushes.Transparent,
+                Foreground = textColor,
+                BorderBrush = borderColor,
+                BorderThickness = new Thickness(1),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                MinWidth = 70
+            };
+            pauseBtn.Template = secondaryTpl;
+
+            btnRow.Children.Add(pauseBtn);
+            btnRow.Children.Add(cancelBtn);
+            panel.Children.Add(btnRow);
+
+            outerGrid.Children.Add(panel);
 
             var win = new System.Windows.Window
             {
                 Title = "Updating Totthodhara",
-                Width = 420, Height = 150,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Width = 440,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
                 Owner = this,
                 ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false,
-                WindowStyle = WindowStyle.ToolWindow,
-                Background = (System.Windows.Media.Brush)System.Windows.Application.Current.Resources["WindowBg"] ?? System.Windows.Media.Brushes.White,
-                Content = panel
+                ShowInTaskbar = true,
+                WindowStyle = WindowStyle.None,
+                Background = windowBg,
+                BorderBrush = borderColor,
+                BorderThickness = new Thickness(1),
+                Content = outerGrid
+            };
+
+            // Make title bar draggable
+            titleBar.MouseLeftButtonDown += (s, e) =>
+            {
+                if (e.ClickCount == 1) win.DragMove();
+            };
+
+            // Cancel token source
+            var cts = new System.Threading.CancellationTokenSource();
+            System.Threading.CancellationTokenSource ctsRef = cts;
+            bool isPaused = false;
+
+            // Pause/Resume handler
+            pauseBtn.Click += (s, e) =>
+            {
+                isPaused = !isPaused;
+                if (isPaused)
+                {
+                    ctsRef.Cancel();
+                    pauseBtn.Content = "Resume";
+                    statusText.Text = "Paused";
+                }
+                else
+                {
+                    var newCts = new System.Threading.CancellationTokenSource();
+                    ctsRef.Dispose();
+                    ctsRef = newCts;
+                    pauseBtn.Content = "Pause";
+                    statusText.Text = "Resuming...";
+                }
+            };
+
+            // Close handlers (title bar X + cancel button + window close)
+            void DoCancel()
+            {
+                cts.Cancel();
+                if (!win.Dispatcher.CheckAccess()) return;
+                win.Close();
+            }
+
+            btnClose.Click += (s, e) => DoCancel();
+            cancelBtn.Click += (s, e) => DoCancel();
+            win.Closing += (s, e) =>
+            {
+                if (!cts.IsCancellationRequested)
+                {
+                    cts.Cancel();
+                }
             };
 
             var progress = new Progress<double>(pct =>
             {
-                progressBar.Value = pct;
-                statusText.Text = pct >= 100 ? "Download complete. Preparing update..." : $"Downloading {pct:F0}%...";
+                win.Dispatcher.Invoke(() =>
+                {
+                    progressBar.Value = pct;
+                    if (!isPaused)
+                        statusText.Text = pct >= 100 ? "Download complete. Preparing update..." : $"Downloading {pct:F0}%...";
+                });
             });
 
+            var statusProgress = new Progress<string>(msg =>
+            {
+                win.Dispatcher.Invoke(() =>
+                {
+                    if (!isPaused)
+                        statusText.Text = msg;
+                });
+            });
+
+            btnMin.Click += (s, e) => win.WindowState = WindowState.Minimized;
+
             win.Show();
-            // Ensure UI renders
-            await Task.Delay(200);
+            win.Activate();
+            await Task.Delay(300);
 
             bool ok = false;
+            string downloadError = "";
             try
             {
-                ok = await updateService.DownloadAndInstallAsync(info, progress);
+                ok = await updateService.DownloadAndInstallAsync(info, progress, cts.Token, statusProgress);
+                if (cts.IsCancellationRequested)
+                {
+                    downloadError = "Download cancelled.";
+                    ok = false;
+                }
+            }
+            catch (System.OperationCanceledException)
+            {
+                downloadError = "Download cancelled by user.";
+                ok = false;
             }
             catch (Exception ex)
             {
+                downloadError = ex.Message;
                 ClipDropPro.Services.Logger.Write($"[MainWindow] Update error: {ex}");
             }
 
@@ -2146,24 +2452,34 @@ namespace ClipDropPro
 
             if (ok)
             {
-                System.Windows.MessageBox.Show(
+                ThemedMessageBox.Show(
+                    this,
+                    "Update Ready",
                     "Update downloaded successfully. The app will now restart to apply the update.",
-                    "Update Ready", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ThemedMessageBox.Buttons.OK,
+                    ThemedMessageBox.IconType.Info);
                 try { TrayIcon?.Dispose(); } catch { }
                 System.Windows.Application.Current.Shutdown();
             }
             else
             {
-                var fallback = System.Windows.MessageBox.Show(
-                    "Automatic update failed. Would you like to open the download page in your browser instead?",
-                    "Update Failed", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (fallback == MessageBoxResult.Yes)
+                string errorDetail = string.IsNullOrEmpty(downloadError) ? "Could not download or extract update." : downloadError;
+                string openUrl = !string.IsNullOrEmpty(info.ReleasePageUrl)
+                    ? info.ReleasePageUrl
+                    : $"https://github.com/hungry-detective/Totthodhara/releases/tag/v{info.LatestVersion}";
+                var fallback = ThemedMessageBox.Show(
+                    this,
+                    "Update Failed",
+                    $"{errorDetail}\n\nWould you like to open the GitHub releases page to download manually?",
+                    ThemedMessageBox.Buttons.YesNo,
+                    ThemedMessageBox.IconType.Warning);
+                if (fallback == ThemedMessageBox.Result.Yes)
                 {
                     try
                     {
                         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                         {
-                            FileName = info.DownloadUrl,
+                            FileName = openUrl,
                             UseShellExecute = true
                         });
                     }
@@ -2176,13 +2492,14 @@ namespace ClipDropPro
         {
             try
             {
-                var result = System.Windows.MessageBox.Show(
-                    $"A new version v{updateInfo.LatestVersion} is available!\n\nCurrent version: v{App.GetService<ClipDropPro.Services.IUpdateService>()?.GetCurrentVersion() ?? "?"}\n\n{(string.IsNullOrEmpty(updateInfo.ReleaseNotes) ? "" : $"Release notes:\n{updateInfo.ReleaseNotes}\n\n")}Download and install now?",
+                var result = ThemedMessageBox.Show(
+                    this,
                     "Update Available",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
+                    $"A new version v{updateInfo.LatestVersion} is available!\n\nCurrent: v{App.GetService<ClipDropPro.Services.IUpdateService>()?.GetCurrentVersion() ?? "?"}",
+                    ThemedMessageBox.Buttons.YesNo,
+                    ThemedMessageBox.IconType.Info);
 
-                if (result == MessageBoxResult.Yes && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
+                if (result == ThemedMessageBox.Result.Yes && !string.IsNullOrEmpty(updateInfo.DownloadUrl))
                 {
                     var updateService = App.GetService<ClipDropPro.Services.IUpdateService>();
                     if (updateService != null)

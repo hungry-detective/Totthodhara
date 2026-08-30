@@ -308,7 +308,12 @@ namespace ClipDropPro.ViewModels
             {
                 await _dataService.InitializeAsync();
                 Log("DataService initialized.");
-                await LoadItemsAsync(showWelcomeIfEmpty: true);
+
+                // Clean up any leftover welcome items from previous versions
+                await _dataService.DeleteWelcomeItemsAsync();
+                Log("Welcome items cleanup completed.");
+
+                await LoadItemsAsync();
                 Log("LoadItemsAsync completed.");
                 
                 // Background cleanup task
@@ -347,7 +352,7 @@ namespace ClipDropPro.ViewModels
             });
         }
 
-        public async Task LoadItemsAsync(bool forceReload = false, bool showWelcomeIfEmpty = false)
+        public async Task LoadItemsAsync(bool forceReload = false)
         {
             Log("LoadItemsAsync started.");
             int maxItems = Math.Max(_settingsService.MaxHistoryItems, 10);
@@ -362,19 +367,6 @@ namespace ClipDropPro.ViewModels
                          .ToList();
 
             Log($"Found {items.Count} items.");
-
-            if (items.Count == 0 && showWelcomeIfEmpty)
-            {
-                var welcomeItem = new ClipboardItem
-                {
-                    TextContent = "Welcome to Totthodhara! Clipboard items appear here.",
-                    DateAdded = DateTime.Now,
-                    IsPinned = true,
-                    DisplayTitle = "Welcome to Totthodhara"
-                };
-                await _dataService.AddItemAsync(welcomeItem);
-                items.Add(welcomeItem);
-            }
 
             // Mark new items with flash animation
             int? prevTopId = ClipboardItems.Count > 0 ? ClipboardItems[0].Id : null;
@@ -1171,7 +1163,8 @@ namespace ClipDropPro.ViewModels
                 catch (Exception ex)
                 {
                     Log($"EXCEPTION in OpenSettings: {ex.Message}\n{ex.StackTrace}");
-                    System.Windows.MessageBox.Show($"Could not open settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    if (System.Windows.Application.Current?.MainWindow is MainWindow mw)
+                        ClipDropPro.ThemedMessageBox.Show(mw, "Error", $"Could not open settings: {ex.Message}", ClipDropPro.ThemedMessageBox.Buttons.OK, ClipDropPro.ThemedMessageBox.IconType.Error);
                 }
             });
         }

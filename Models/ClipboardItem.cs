@@ -121,6 +121,9 @@ namespace ClipDropPro.Models
         [Ignore]
         public bool IsFirstUnpinned { get => _isFirstUnpinned; set => SetProperty(ref _isFirstUnpinned, value); }
 
+        [Ignore]
+        public bool IsDoubleDigit => Index >= 10;
+
         private bool _isRemoving;
         [Ignore]
         public bool IsRemoving 

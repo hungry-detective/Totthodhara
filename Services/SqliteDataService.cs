@@ -77,6 +77,18 @@ namespace ClipDropPro.Services
             }
         }
 
+        public async Task DeleteWelcomeItemsAsync()
+        {
+            await InitializeAsync();
+            var itemsToDelete = await _db!.Table<ClipboardItem>()
+                .Where(x => x.DisplayTitle == "Welcome to Totthodhara")
+                .ToListAsync();
+            foreach (var item in itemsToDelete)
+            {
+                await _db.DeleteAsync(item);
+            }
+        }
+
         public async Task TrimOldestUnpinnedAsync(int maxItems)
         {
             await InitializeAsync();

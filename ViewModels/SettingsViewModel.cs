@@ -47,7 +47,7 @@ namespace ClipDropPro.ViewModels
         }
 
         [ObservableProperty]
-        private string _currentSection = "General"; // General, Personalization, Privacy
+        private string _currentSection = "Appearance"; // Appearance, Behavior, Storage, Plugins, About
 
         public string[] Themes => new[] { "Light", "Dark", "Transparent", "System" };
         public string[] BarSizes => new[] { "Small", "Medium", "Large" };

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
         xmlns:conv="clr-namespace:ClipDropPro.Converters"
-        Title="Totthodhara Settings" Height="500" Width="520"
+        Title="Totthodhara Settings" Height="540" Width="540"
         Icon="pack://application:,,,/app.png"
         Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextColor}" 
         WindowStyle="None" AllowsTransparency="False"
@@ -345,23 +345,23 @@
         <!-- Section Navigation -->
         <Border Grid.Row="1" Background="{DynamicResource WindowBg}" Padding="16,8,16,0">
             <StackPanel Orientation="Horizontal">
-                <RadioButton Content="General" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=General}"
-                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="General"/>
-                <RadioButton Content="Personalization" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Personalization}"
-                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Personalization"/>
-                <RadioButton Content="Privacy" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Privacy}"
-                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Privacy"/>
-                <RadioButton Content="Plugins" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
+                <RadioButton Content="Appearance" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Appearance}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Appearance"/>
+                <RadioButton Content="Behavior" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Behavior}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Behavior"/>
+                <RadioButton Content="Storage" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Storage}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Storage"/>
+                <RadioButton Content="Plugins &amp; Updates" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Plugins"/>
                 <RadioButton Content="About" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=About}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="About"/>
             </StackPanel>
         </Border>
 
-        <!-- General Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=General}">
+        <!-- Appearance Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Appearance}">
             <StackPanel>
-                <TextBlock Text="General" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+                <TextBlock Text="Appearance" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
 
                 <!-- App Theme -->
                 <Border Style="{StaticResource SettingCardStyle}">
@@ -376,14 +376,14 @@
                             <TextBlock Text="App theme" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
                             <TextBlock Text="Select which app theme to display" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <ComboBox Grid.Column="2" Width="120" VerticalAlignment="Center" 
+                        <ComboBox Grid.Column="2" Width="120" VerticalAlignment="Center"
                                   ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
                                   Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"
                                   SelectionChanged="ThemeComboBox_SelectionChanged"/>
                     </Grid>
                 </Border>
 
-                <!-- Run at Startup -->
+                <!-- Bar Size -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -391,16 +391,18 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE7F8;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <TextBlock Text="&#xE739;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Run at startup" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Automatically start app when you sign in" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Bar size" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Change the thickness of the shelf bar" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding StartWithWindows}"/>
+                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center"
+                                  ItemsSource="{Binding BarSizes}" SelectedItem="{Binding BarSize}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
                     </Grid>
                 </Border>
 
-                <!-- Hide Clipboard Items -->
+                <!-- Shelf Position -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -408,16 +410,38 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <TextBlock Text="&#xE8F0;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Hide clipboard items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Hide items, search and multi-paste — compact toolbar-only shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Shelf position" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Dock the shelf to top or bottom of screen" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HideClipboard}"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <RadioButton Content="Top" IsChecked="{Binding IsTopChecked}" Style="{StaticResource RadioContentStyle}" Margin="0,0,4,0"/>
+                            <RadioButton Content="Bottom" IsChecked="{Binding IsBottomChecked}" Style="{StaticResource RadioContentStyle}"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
-                <!-- Network Speed + Speed on left (combined) -->
+                <!-- Alignment -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Alignment" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="How items are aligned in the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center"
+                                  ItemsSource="{Binding Alignments}" SelectedItem="{Binding Alignment}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Network Speed + Speed on left -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <StackPanel>
                         <Grid>
@@ -512,7 +536,6 @@
                                 <TextBlock Text="{Binding PinnedCountText}" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                             </StackPanel>
                         </Grid>
-                        <!-- Only pinned clocks shown (clean) - uses visibility to avoid crash when unpinning -->
                         <ItemsControl ItemsSource="{Binding WorldClockPinItems}" Margin="32,12,0,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -537,7 +560,6 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <!-- Search box with live filter -->
                         <TextBox Margin="32,12,0,0" Padding="8,6" Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
                                   Text="{Binding ZoneSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" ToolTip="Type to filter — e.g. Tokyo, Dhaka, Arizona">
                             <TextBox.Style>
@@ -624,6 +646,64 @@
                         <TextBlock Text="Type above to live-filter — choose from dropdown then click Add to pin" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="32,6,0,0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Behavior Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Behavior}">
+            <StackPanel>
+                <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <!-- Run at Startup -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7F8;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Run at startup" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically start app when you sign in" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding StartWithWindows}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Hide Clipboard Items -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Hide clipboard items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Hide items, search and multi-paste — compact toolbar-only shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HideClipboard}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Always on Top -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Always on top" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Keep the shelf window above other windows" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AlwaysOnTop}"/>
+                    </Grid>
+                </Border>
 
                 <!-- Copy to Destination -->
                 <Border Style="{StaticResource SettingCardStyle}">
@@ -655,7 +735,7 @@
                             <TextBlock Text="Tray icon action" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
                             <TextBlock Text="Choose what happens on double-click" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                        <ComboBox Grid.Column="2" Width="140" VerticalAlignment="Center" 
+                        <ComboBox Grid.Column="2" Width="140" VerticalAlignment="Center"
                                   ItemsSource="{Binding TrayIconActions}" SelectedItem="{Binding TrayIconAction}"
                                   Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
                     </Grid>
@@ -663,75 +743,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Personalization Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Personalization}">
+        <!-- Storage Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Storage}">
             <StackPanel>
-                <TextBlock Text="Personalization" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
-
-                <!-- Bar Size -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE739;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Bar size" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Change the thickness of the shelf bar" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center" 
-                                  ItemsSource="{Binding BarSizes}" SelectedItem="{Binding BarSize}"
-                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
-                    </Grid>
-                </Border>
-
-                <!-- Shelf Position -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE8F0;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Shelf position" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Dock the shelf to top or bottom of screen" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <RadioButton Content="Top" IsChecked="{Binding IsTopChecked}" Style="{StaticResource RadioContentStyle}" Margin="0,0,4,0"/>
-                            <RadioButton Content="Bottom" IsChecked="{Binding IsBottomChecked}" Style="{StaticResource RadioContentStyle}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- Alignment -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Alignment" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="How items are aligned in the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center" 
-                                  ItemsSource="{Binding Alignments}" SelectedItem="{Binding Alignment}"
-                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
-                    </Grid>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
-
-        <!-- Privacy Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Privacy}">
-            <StackPanel>
-                <TextBlock Text="Privacy" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+                <TextBlock Text="Storage" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
 
                 <!-- Auto-clean -->
                 <Border Style="{StaticResource SettingCardStyle}">
@@ -751,23 +766,6 @@
                                      Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
                             <TextBlock Text="hours" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- Always on Top -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Always on top" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Keep the shelf window above other windows" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AlwaysOnTop}"/>
                     </Grid>
                 </Border>
 
@@ -814,10 +812,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Plugins Section -->
+        <!-- Plugins & Updates Section -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Plugins}">
             <StackPanel>
-                <TextBlock Text="Plugins" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+                <TextBlock Text="Plugins &amp; Updates" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
 
                 <!-- Show Plugins -->
                 <Border Style="{StaticResource SettingCardStyle}">
@@ -852,31 +850,8 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-            </StackPanel>
-        </ScrollViewer>
 
-        <!-- About Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
-            <StackPanel>
-                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
-
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
-                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock x:Name="VersionText" Text="Version 1.1.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
+                <!-- Check for updates -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -908,6 +883,7 @@
                     </Grid>
                 </Border>
 
+                <!-- Auto-check on startup -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -924,6 +900,7 @@
                     </Grid>
                 </Border>
 
+                <!-- Silent auto-update -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -937,6 +914,30 @@
                             <TextBlock Text="Download and prepare updates in background without prompts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
                         <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding SilentAutoUpdate}"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- About Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
+            <StackPanel>
+                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock x:Name="VersionText" Text="Version 1.1.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

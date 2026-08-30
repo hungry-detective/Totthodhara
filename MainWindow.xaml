@@ -185,41 +185,47 @@
                     <ColumnDefinition Width="Auto"/> <!-- More Button -->
                 </Grid.ColumnDefinitions>
 
+                <!-- Section dividers — only between major categories -->
+                <Rectangle Grid.Column="0" Width="1" Height="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,6,0" Fill="{DynamicResource BorderColor}" Opacity="0.6" IsHitTestVisible="False"
+                           Visibility="{Binding ShowLeftMonitors, Converter={StaticResource InvertedBoolToVis}}"/>
+                <Rectangle Grid.Column="7" Width="1" Height="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,6,0" Fill="{DynamicResource BorderColor}" Opacity="0.6" IsHitTestVisible="False"
+                           Visibility="{Binding ShowSystemMonitor, Converter={StaticResource InvertedBoolToVis}}"/>
+
                 <!-- Left Monitors - speed and hardware when on left -->
                 <StackPanel x:Name="LeftMonitorsPanel" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
                             Visibility="{Binding ShowLeftMonitors, Converter={StaticResource BoolToVis}}">
                     <!-- Network Download Left -->
-                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
                         </Border.ToolTip>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
-                                <Canvas Width="10" Height="12">
-                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,9 M3,7 L5,9 L7,7"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Viewbox Width="10" Height="14" VerticalAlignment="Center">
+                                <Canvas Width="10" Height="14">
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,10.5 M0,9 L5,12 L10,9"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="58" Margin="4,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- Network Upload Left -->
-                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
                         </Border.ToolTip>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
-                                <Canvas Width="10" Height="12">
-                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,11 L5,3 M3,5 L5,3 L7,5"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Viewbox Width="10" Height="14" VerticalAlignment="Center">
+                                <Canvas Width="10" Height="14">
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,13 L5,3.5 M0,5 L5,2 L10,5"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="58" Margin="4,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- CPU Left -->
-                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowHardwareOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="CPU Usage"/></ToolTip>
@@ -248,7 +254,7 @@
                         </StackPanel>
                     </Border>
                     <!-- Memory Left -->
-                    <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowHardwareOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Memory Usage"/></ToolTip>
@@ -402,7 +408,7 @@
                                                 </DataTrigger.EnterActions>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource AccentColor}"/>
+                                                <Setter Property="Background" Value="{DynamicResource SelectedItemGradient}"/>
                                                 <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
                                                 <Setter Property="BorderThickness" Value="1"/>
                                             </DataTrigger>
@@ -499,16 +505,16 @@
                                         <ColumnDefinition Width="Auto"/> <!-- Column 3: URL Open -->
                                     </Grid.ColumnDefinitions>
 
-                                    <!-- Index number -->
-                                    <Grid Grid.Column="0" MinWidth="{DynamicResource ItemCircleSize}" Margin="4,0,4,0" VerticalAlignment="Center">
+                                    <!-- Index number (plain text, no circle highlight) -->
+                                    <Grid Grid.Column="0" Margin="6,0,6,0" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock Text="{Binding DisplayIndex}"
                                                    FontSize="{DynamicResource ItemIndexFontSize}"
-                                                      FontWeight="Bold"
-                                                      Foreground="{DynamicResource TextColor}"
-                                                      Opacity="1.0"
-                                                      TextDecorations="None"
-                                                     HorizontalAlignment="Center"
-                                                     VerticalAlignment="Center"/>
+                                                   FontWeight="Bold"
+                                                   Foreground="{DynamicResource TextColor}"
+                                                   Opacity="1.0"
+                                                   TextDecorations="None"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
                                     </Grid>
 
                                     <!-- Icon Column -->
@@ -754,37 +760,37 @@
                         Visibility="{Binding ShowSystemMonitor, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- Network Download -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                  Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
                                 <Border.ToolTip>
                                     <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
                             </Border.ToolTip>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
-                                    <Canvas Width="10" Height="12">
-                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,9 M3,7 L5,9 L7,7"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Viewbox Width="10" Height="14" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="14">
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,1 L5,11 M1,8 L5,12 L9,8"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="58" Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- Network Upload -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                  Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
                             </Border.ToolTip>
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Viewbox Width="10" Height="12" Margin="0,0,2,0" VerticalAlignment="Center">
-                                    <Canvas Width="10" Height="12">
-                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,11 L5,3 M3,5 L5,3 L7,5"/>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Viewbox Width="10" Height="14" VerticalAlignment="Center">
+                                    <Canvas Width="10" Height="14">
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M5,13 L5,3 M1,6 L5,2 L9,6"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="48" TextAlignment="Right"/>
+                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="58" Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- CPU - chip icon with pins -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                 Visibility="{Binding ShowHardwareOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="CPU Usage"/></ToolTip>
@@ -813,7 +819,7 @@
                             </StackPanel>
                         </Border>
                         <!-- Memory - horizontal RAM stick -->
-                        <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="6,0" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                 Visibility="{Binding ShowHardwareOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Memory Usage"/></ToolTip>
@@ -852,7 +858,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center">
+                                <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Margin="3,0,3,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Padding" Value="6,0"/>
