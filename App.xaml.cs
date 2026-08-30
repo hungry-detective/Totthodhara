@@ -109,6 +109,27 @@ namespace ClipDropPro
             }
 
             Log("OnStartup started");
+
+            // Clean up any leftover download folders from previous update attempts
+            // (e.g. if the PowerShell updater crashed before cleaning %TEMP%)
+            try
+            {
+                string tempRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaUpdate");
+                if (System.IO.Directory.Exists(tempRoot))
+                {
+                    int removed = 0;
+                    foreach (var dir in System.IO.Directory.GetDirectories(tempRoot))
+                    {
+                        try { System.IO.Directory.Delete(dir, recursive: true); removed++; }
+                        catch { }
+                    }
+                    try { System.IO.Directory.Delete(tempRoot, recursive: false); } catch { }
+                    if (removed > 0)
+                        Log($"Cleaned up {removed} orphaned download folder(s) from %TEMP%");
+                }
+            }
+            catch (Exception ex) { Log($"Orphaned download cleanup error: {ex.Message}"); }
+
             _host = Host.CreateDefaultBuilder(e.Args)
                 .ConfigureServices((context, services) =>
                 {
