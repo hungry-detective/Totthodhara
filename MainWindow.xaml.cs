@@ -1857,23 +1857,29 @@ namespace ClipDropPro
                         if (item.IsImage && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
                         {
                             // Image drag: use ORIGINAL file path (more compatible with target apps
-                            // like opencode, browsers, etc.) + Bitmap + DIB for live preview in
-                            // image-aware targets (WhatsApp, etc.)
+                            // like opencode, browsers, etc.) + Bitmap for live preview.
+                            // DIB is opt-in (off by default) because some apps (e.g. opencode) get
+                            // confused when Bitmap + DIB + FileDrop are all present and report
+                            // "Failed to send" / "Failed to fetch" even though the file uploads.
+                            bool includeDib = _viewModel?.SettingsViewModel?.IncludeDIBInDrag ?? false;
                             var data = new System.Windows.DataObject();
                             data.SetData("ClipDropShelfOrigin", item);
                             data.SetFileDropList(new System.Collections.Specialized.StringCollection { item.FilePath });
                             using (var bmp = new System.Drawing.Bitmap(item.FilePath))
                             {
                                 data.SetData(System.Windows.DataFormats.Bitmap, bmp);
-                                using (var ms = new System.IO.MemoryStream())
+                                if (includeDib)
                                 {
-                                    bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                                    var dib = new byte[ms.Length - 14];
-                                    System.Buffer.BlockCopy(ms.GetBuffer(), 14, dib, 0, dib.Length);
-                                    data.SetData("DeviceIndependentBitmap", new System.IO.MemoryStream(dib));
+                                    using (var ms = new System.IO.MemoryStream())
+                                    {
+                                        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
+                                        var dib = new byte[ms.Length - 14];
+                                        System.Buffer.BlockCopy(ms.GetBuffer(), 14, dib, 0, dib.Length);
+                                        data.SetData("DeviceIndependentBitmap", new System.IO.MemoryStream(dib));
+                                    }
                                 }
                             }
-                            Log($"DragImage: {System.IO.Path.GetFileName(item.FilePath)} + Bitmap + DIB");
+                            Log($"DragImage: {System.IO.Path.GetFileName(item.FilePath)} + Bitmap{(includeDib ? " + DIB" : "")}");
                             var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
                             Log($"DragEnd: result={result}");
                         }

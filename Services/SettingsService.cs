@@ -40,6 +40,7 @@ namespace ClipDropPro.Services
         public bool AutoCheckUpdates { get; set; } = true;
         public bool SilentAutoUpdate { get; set; } = false;
         public bool HideClipboard { get; set; } = false;
+        public bool IncludeDIBInDrag { get; set; } = false;
     }
 
     public class SettingsService : ISettingsService
@@ -291,6 +292,12 @@ namespace ClipDropPro.Services
         {
             get => _settings.HideClipboard;
             set { _settings.HideClipboard = value; Save(); }
+        }
+
+        public bool IncludeDIBInDrag
+        {
+            get => _settings.IncludeDIBInDrag;
+            set { _settings.IncludeDIBInDrag = value; Save(); }
         }
     }
 }

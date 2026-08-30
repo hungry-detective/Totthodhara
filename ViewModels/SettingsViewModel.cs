@@ -39,6 +39,7 @@ namespace ClipDropPro.ViewModels
             _autoCheckUpdates = _settingsService.AutoCheckUpdates;
             _silentAutoUpdate = _settingsService.SilentAutoUpdate;
             _hideClipboard = _settingsService.HideClipboard;
+            _includeDIBInDrag = _settingsService.IncludeDIBInDrag;
             // Build pinned zone items (BD + AZ pinned by default)
             var pinned = _settingsService.PinnedWorldClockZones ?? new System.Collections.Generic.List<string>();
             WorldClockPinItems = new ObservableCollection<WorldClockZonePinItem>(
@@ -319,6 +320,14 @@ namespace ClipDropPro.ViewModels
         partial void OnHideClipboardChanged(bool value)
         {
             _settingsService.HideClipboard = value;
+        }
+
+        [ObservableProperty]
+        private bool _includeDIBInDrag = false;
+
+        partial void OnIncludeDIBInDragChanged(bool value)
+        {
+            _settingsService.IncludeDIBInDrag = value;
         }
 
         [ObservableProperty]

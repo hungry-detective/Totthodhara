@@ -37,6 +37,7 @@ namespace ClipDropPro.Services
         bool AutoCheckUpdates { get; set; }
         bool SilentAutoUpdate { get; set; }
         bool HideClipboard { get; set; }
+        bool IncludeDIBInDrag { get; set; }
         void Save();
     }
 }

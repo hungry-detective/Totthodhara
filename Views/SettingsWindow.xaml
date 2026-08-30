@@ -740,6 +740,23 @@
                                   Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
                     </Grid>
                 </Border>
+
+                <!-- Include DIB in image drag -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8B6;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Include DIB in image drag" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Off = cleaner drag (File + Bitmap). On = also sends DIB for apps like WhatsApp, but may confuse opencode and some chat apps." FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6" TextWrapping="Wrap" MaxWidth="420"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IncludeDIBInDrag}"/>
+                    </Grid>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 
