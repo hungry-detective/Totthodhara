@@ -329,6 +329,14 @@ The app icon (`app.ico`) must be a perfect square. A non-square PNG renamed to .
 - Removes files older than N days (pinned files preserved)
 - Runs on startup `InitializeAsync()`
 
+### 30. Update Notification on Startup
+- `AutoCheckUpdates` is `true` by default (`SettingsService.cs:40`)
+- On startup, `App.OnStartup` runs an auto-check via `Task.Run`
+- If `IsUpdateAvailable` → shows the update notification dialog (or runs silent install if `SilentAutoUpdate` is on)
+- If **no** update available → completely silent (only a log line, **NO** "You are up to date" popup on startup)
+- The "You're up to date" message only shows on **manual** checks (tray menu / Settings → About → Check for Updates) — not on auto-check
+- 1-hour result cache (`update_cache/last_check.json`) avoids hitting GitHub on every launch
+
 ### 30. Single Instance Enforcement
 - Named `Mutex` (`"Totthodhara-ClipDropPro-Unique-Mutex"`)
 - On startup, kills old instances (by process name: Totthodhara or ClipDropPro)

@@ -37,7 +37,7 @@ namespace ClipDropPro.Services
         public bool MonitorsOnLeft { get; set; } = false;
         public bool HardwareOnLeft { get; set; } = true;
         public bool CompactClock { get; set; } = false;
-        public bool AutoCheckUpdates { get; set; } = false;
+        public bool AutoCheckUpdates { get; set; } = true;
         public bool SilentAutoUpdate { get; set; } = false;
         public bool HideClipboard { get; set; } = false;
     }
