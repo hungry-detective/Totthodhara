@@ -98,20 +98,20 @@ namespace ClipDropPro.Services
 
         public async Task<UpdateInfo> CheckForUpdateAsync()
         {
-            // Return cached result if less than 1 hour old (avoids hitting network)
+            // Return cached result if less than 1 hour old (avoids hitting network).
+            // Only reuse the cache when it says an update IS available: a "no update"
+            // result cached minutes ago can be obsolete the instant a new release lands,
+            // so a cached "up to date" must always fall through to a fresh live check.
             if (_cachedInfo != null && (DateTime.UtcNow - _lastCheckTime) < TimeSpan.FromHours(1))
             {
-                // Sanity check: if the cached "latest" is not actually newer than what we're running now,
-                // the cache is stale (e.g. user updated manually). Override to "no update available".
-                if (!IsNewerVersion(_cachedInfo.LatestVersion, _currentVersion))
+                if (_cachedInfo.IsUpdateAvailable && IsNewerVersion(_cachedInfo.LatestVersion, _currentVersion))
                 {
-                    Logger.Write($"[UpdateService] Cache stale (cached latest={_cachedInfo.LatestVersion} not newer than current={_currentVersion}) - refreshing");
-                    _cachedInfo.IsUpdateAvailable = false;
-                    if (!string.IsNullOrEmpty(_cachedInfo.LatestVersion))
-                        _cachedInfo.LatestVersion = _currentVersion;
+                    Logger.Write($"[UpdateService] Returning cached update info (age: {(DateTime.UtcNow - _lastCheckTime).TotalMinutes:F0} min)");
+                    return _cachedInfo;
                 }
-                Logger.Write($"[UpdateService] Returning cached update info (age: {(DateTime.UtcNow - _lastCheckTime).TotalMinutes:F0} min)");
-                return _cachedInfo;
+                // Cache says "no update" or is stale (e.g. current caught up to cached latest):
+                // re-verify live instead of trusting a potentially outdated cache.
+                Logger.Write($"[UpdateService] Cached result weak/stale (latest={_cachedInfo.LatestVersion}, update={_cachedInfo.IsUpdateAvailable}) - re-checking live");
             }
 
             // Try GitHub Atom feed first (no rate limit), fall back to API
@@ -140,7 +140,9 @@ namespace ClipDropPro.Services
                 if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
                     Logger.Write("[UpdateService] GitHub API rate limit hit (403)");
-                    if (_cachedInfo != null)
+                    // Never report a stale "no update" cache as "up to date" — surface an
+                    // update-result if we actually have one cached, otherwise report failure.
+                    if (_cachedInfo != null && _cachedInfo.IsUpdateAvailable && !string.IsNullOrEmpty(_cachedInfo.DownloadUrl))
                     {
                         _lastCheckTime = DateTime.UtcNow;
                         return _cachedInfo;
@@ -149,7 +151,7 @@ namespace ClipDropPro.Services
                     {
                         IsUpdateAvailable = false,
                         CurrentVersion = _currentVersion,
-                        ErrorMessage = "GitHub API rate limit exceeded and no cached result available. Please wait an hour and try again."
+                        ErrorMessage = "GitHub API rate limit exceeded. Please wait an hour and try again."
                     };
                 }
 
@@ -205,12 +207,21 @@ namespace ClipDropPro.Services
             catch (Exception ex)
             {
                 Logger.Write($"[UpdateService] Check failed: {ex.Message}");
-                if (_cachedInfo != null)
+                // Never silently report a stale "no update" cache as "up to date".
+                // Only reuse the cache if it actually has an actionable update still pending.
+                if (_cachedInfo != null && _cachedInfo.IsUpdateAvailable && !string.IsNullOrEmpty(_cachedInfo.DownloadUrl))
                 {
-                    Logger.Write("[UpdateService] Returning stale cached result due to error");
+                    Logger.Write("[UpdateService] Returning cached update result due to error");
                     return _cachedInfo;
                 }
-                return new UpdateInfo { IsUpdateAvailable = false, CurrentVersion = _currentVersion, ErrorMessage = ex.Message };
+                return new UpdateInfo
+                {
+                    IsUpdateAvailable = false,
+                    CurrentVersion = _currentVersion,
+                    ErrorMessage = string.IsNullOrWhiteSpace(ex.Message)
+                        ? "Network error while checking for updates."
+                        : ex.Message
+                };
             }
         }
 
@@ -431,6 +442,8 @@ namespace ClipDropPro.Services
                     trimmed.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase))
                 {
                     var hash = trimmed.Substring(trimmed.IndexOf(':') + 1).Trim();
+                    // Strip markdown code-span backticks around the hash
+                    hash = hash.Trim('`', '*', ' ', '\t');
                     if (hash.Length == 64 && hash.All("0123456789abcdefABCDEF".Contains))
                         return hash.ToLowerInvariant();
                 }
