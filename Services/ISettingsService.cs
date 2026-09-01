@@ -38,6 +38,9 @@ namespace ClipDropPro.Services
         bool SilentAutoUpdate { get; set; }
         bool HideClipboard { get; set; }
         bool IncludeDIBInDrag { get; set; }
+        bool TransparencyEffect { get; set; }
+        bool FollowSystemTransparency { get; set; }
+        bool RoundedCorners { get; set; }
         void Save();
     }
 }

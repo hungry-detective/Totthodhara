@@ -47,6 +47,8 @@
         <conv:SnippetToMenuItemConverter x:Key="SnippetToMenuItemConverter" />
         <conv:StringToHorizontalAlignmentConverter x:Key="StringToAddConverter" />
         <conv:HexToColorConverter x:Key="HexToColorConverter" />
+        <conv:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
+        <conv:StringEmptyToVisibilityConverter x:Key="StringEmptyToVisibilityConverter" />
 
         <!-- Content DataTemplates for ItemContentSelector -->
         <DataTemplate x:Key="ImageContentTemplate">
@@ -94,8 +96,8 @@
             <EventSetter Event="Closed" Handler="ContextMenu_Closed"/>
             <Setter Property="Background" Value="{DynamicResource MenuBg}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ContextMenu">
@@ -161,7 +163,7 @@
 
         <Border ClipToBounds="True">
             <Border x:Name="CapsuleBorder" 
-                    CornerRadius="18" 
+                    CornerRadius="26" 
                     Background="{DynamicResource AppBackground}"
                     BorderBrush="{DynamicResource BorderColor}" 
                     BorderThickness="0"
@@ -348,7 +350,7 @@
                         <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border CornerRadius="{DynamicResource ItemCircleCorner}" Height="{DynamicResource ItemCardHeight}" Margin="2,0" Padding="{DynamicResource ItemPadding}" MinWidth="48" MaxWidth="160" VerticalAlignment="Center" SnapsToDevicePixels="True"
-                                    BorderThickness="0.5"
+                                    BorderThickness="0.7"
                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Border.Style>
                                     <Style TargetType="Border">
@@ -362,32 +364,8 @@
                                         </Setter>
                                         <Style.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
-                                                <Setter Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
-                                                <Setter Property="BorderThickness" Value="1"/>
                                                 <Setter Property="Cursor" Value="Hand"/>
                                             </Trigger>
-                                            <EventTrigger RoutedEvent="Loaded">
-                                                <BeginStoryboard>
-                                                    <Storyboard>
-                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25">
-                                                            <DoubleAnimation.EasingFunction>
-                                                                <CubicEase EasingMode="EaseOut"/>
-                                                            </DoubleAnimation.EasingFunction>
-                                                        </DoubleAnimation>
-                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleX)" From="0.85" To="1" Duration="0:0:0.3">
-                                                            <DoubleAnimation.EasingFunction>
-                                                                <CubicEase EasingMode="EaseOut"/>
-                                                            </DoubleAnimation.EasingFunction>
-                                                        </DoubleAnimation>
-                                                        <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(ScaleTransform.ScaleY)" From="0.85" To="1" Duration="0:0:0.3">
-                                                            <DoubleAnimation.EasingFunction>
-                                                                <CubicEase EasingMode="EaseOut"/>
-                                                            </DoubleAnimation.EasingFunction>
-                                                        </DoubleAnimation>
-                                                    </Storyboard>
-                                                </BeginStoryboard>
-                                            </EventTrigger>
                                             <DataTrigger Binding="{Binding IsRemoving}" Value="True">
                                                 <DataTrigger.EnterActions>
                                                     <BeginStoryboard>
@@ -444,14 +422,24 @@
                                     </ContextMenu>
                                 </Border.ContextMenu>
                                 
-                                <Grid VerticalAlignment="Center">
-                                    <!-- Separator line before first unpinned item -->
+                                 <Grid VerticalAlignment="Center">
+                                     <!-- Separator line before first unpinned item -->
                                     <Rectangle Width="1" HorizontalAlignment="Left" Fill="{DynamicResource BorderColor}" Opacity="0.6"
                                                IsHitTestVisible="False" Margin="-4,6,0,6"
                                                Visibility="{Binding IsFirstUnpinned, Converter={StaticResource BoolToVis}}"/>
-                                    <Grid PreviewMouseMove="Item_PreviewMouseMove" ToolTipService.InitialShowDelay="100" ToolTipService.ShowDuration="15000" ToolTipService.ShowOnDisabled="False">
+                                       <Grid PreviewMouseMove="Item_PreviewMouseMove" ToolTipService.InitialShowDelay="100" ToolTipService.ShowDuration="15000" ToolTipService.ShowOnDisabled="False">
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Opacity" Value="0"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding StatusText}" Value="">
+                                                        <Setter Property="Opacity" Value="1"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
                                     <Grid.ToolTip>
-                                        <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}" Padding="5" Placement="Top" VerticalOffset="-8">
+                                         <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderThickness="0" Padding="5" Placement="Top" VerticalOffset="-8">
                                             <StackPanel MaxWidth="300">
                                                 <!-- Image ToolTip -->
                                                 <Image Source="{Binding ThumbnailSource}" MaxHeight="200" Stretch="Uniform" 
@@ -569,8 +557,12 @@
                                                        Margin="-3,-3,0,0"
                                                        Foreground="#FFD700"
                                                        IsHitTestVisible="False"
-                                                       Visibility="{Binding IsSnippet, Converter={StaticResource BoolToVis}}"/>
-                            </Grid>
+                                                        Visibility="{Binding IsSnippet, Converter={StaticResource BoolToVis}}"/>
+                                     <!-- Dynamic Status Badge (text only) -->
+                                     <TextBlock Text="{Binding StatusText}" Foreground="{DynamicResource TextColor}" FontSize="{DynamicResource ItemFontSize}" FontWeight="Bold"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                Visibility="{Binding StatusText, Converter={StaticResource StringNotEmptyToVisibilityConverter}}"/>
+                             </Grid>
                             </Border>
                         </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -617,18 +609,15 @@
                 <Popup x:Name="StatusToastPopup"
                        AllowsTransparency="True" Placement="Top"
                        VerticalOffset="-10" StaysOpen="False" PopupAnimation="Slide">
-                    <Border x:Name="StatusToastBorder" Background="{DynamicResource CardBg}" CornerRadius="12" Padding="16,8"
+                    <Border x:Name="StatusToastBorder" Background="{DynamicResource WindowBg}" CornerRadius="12" Padding="16,8"
                             BorderBrush="{DynamicResource AccentColor}" BorderThickness="1"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform>
                             <TransformGroup>
-                                <ScaleTransform ScaleX="0.8" ScaleY="0.8"/>
-                                <TranslateTransform Y="10"/>
+                                <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                <TranslateTransform Y="0"/>
                             </TransformGroup>
                         </Border.RenderTransform>
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.3" Color="Black"/>
-                        </Border.Effect>
                         <TextBlock x:Name="StatusToastText" Text="{Binding DebugStatus}" Foreground="{DynamicResource AccentColor}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
                     </Border>
                 </Popup>

@@ -157,5 +157,13 @@ namespace ClipDropPro.Models
             get => _isSelected;
             set => SetProperty(ref _isSelected, value);
         }
+
+        private string _statusText = string.Empty;
+        [Ignore]
+        public string StatusText
+        {
+            get => _statusText;
+            set => SetProperty(ref _statusText, value);
+        }
     }
 }

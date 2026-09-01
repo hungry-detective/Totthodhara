@@ -237,6 +237,14 @@ namespace ClipDropPro
                     UpdateLayoutForHideClipboard();
                     SetAppBarPos();
                     break;
+                case nameof(SettingsViewModel.TransparencyEffect):
+                    EnableAcrylic();
+                    UpdateTheme();
+                    SetAppBarPos();
+                    break;
+                case nameof(SettingsViewModel.RoundedCorners):
+                    SetAppBarPos();
+                    break;
             }
         }
 
@@ -421,6 +429,12 @@ namespace ClipDropPro
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool DeleteObject([In] IntPtr hObject);
 
+        [DllImport("gdi32.dll")]
+        public static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
+
+        [DllImport("user32.dll")]
+        public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
+
         #region Acrylic Blur
         [DllImport("user32.dll")]
         internal static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
@@ -457,11 +471,52 @@ namespace ClipDropPro
 
         private void EnableAcrylic()
         {
-            // Acrylic disabled entirely — solid colors in both modes
+            IntPtr handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (handle == IntPtr.Zero) return;
+
+            bool enabled = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
+            AccentState state = enabled ? AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND : AccentState.ACCENT_DISABLED;
+
+            var theme = _viewModel?.SettingsViewModel?.Theme ?? "Dark";
+            bool isLightTheme = theme == "Light";
+            if (theme == "System")
+            {
+                var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
+                isLightTheme = registryValue != null && (int)registryValue == 1;
+            }
+
+            var accentPolicy = new AccentPolicy
+            {
+                AccentState = state,
+                AccentFlags = 2,
+                GradientColor = enabled ? (isLightTheme ? 0x33FFFFFFU : 0x55222226U) : 0x55222226U,
+                AnimationId = 0
+            };
+
+            int policySize = System.Runtime.InteropServices.Marshal.SizeOf(accentPolicy);
+            IntPtr policyPtr = System.Runtime.InteropServices.Marshal.AllocHGlobal(policySize);
+            try
+            {
+                System.Runtime.InteropServices.Marshal.StructureToPtr(accentPolicy, policyPtr, false);
+                var data = new WindowCompositionAttributeData
+                {
+                    Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                    SizeOfData = policySize,
+                    Data = policyPtr
+                };
+                SetWindowCompositionAttribute(handle, ref data);
+            }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(policyPtr);
+            }
         }
         #endregion
 
         private const uint MONITOR_DEFAULTTONEAREST = 2;
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWCP_ROUND = 2;
+        private const int DWMWCP_DONOTROUND = 1;
         private System.Windows.Threading.DispatcherTimer _fullScreenCheckTimer;
         private bool _isForcedHiddenByFullScreen = false;
         private IntPtr _lastFullScreenWindow = IntPtr.Zero;
@@ -476,22 +531,31 @@ namespace ClipDropPro
         {
             Log("SetAppBarPos started");
 
+            bool rounded = _viewModel?.SettingsViewModel?.RoundedCorners ?? true;
             double baseHeight;
             double capsuleRadius;
             double capsuleMarginV;
             switch (_viewModel.BarSize)
             {
-                case "Small": baseHeight = 32; capsuleRadius = 16; capsuleMarginV = 0; SetItemSizes(16, 2, 4, 2, 12, 28); break;
-                case "Large": baseHeight = 50; capsuleRadius = 25; capsuleMarginV = 0; SetItemSizes(28, 5, 7, 2, 15, 38); break;
+                case "Small": baseHeight = 32; capsuleRadius = rounded ? 12 : 0; capsuleMarginV = 0; SetItemSizes(16, 2, 4, 2, 12, 28); break;
+                case "Large": baseHeight = 50; capsuleRadius = rounded ? 20 : 0; capsuleMarginV = 0; SetItemSizes(28, 5, 7, 2, 15, 38); break;
                 case "Medium":
-                default: baseHeight = 34; capsuleRadius = 17; capsuleMarginV = 0; SetItemSizes(18, 2, 4, 2, 13, 32); break;
+                default: baseHeight = 34; capsuleRadius = rounded ? 14 : 0; capsuleMarginV = 0; SetItemSizes(18, 2, 4, 2, 13, 32); break;
             }
 
+            bool isTop = _viewModel.ShelfPosition == "Top";
             Height = baseHeight;
             if (CapsuleBorder != null)
             {
-                CapsuleBorder.CornerRadius = new System.Windows.CornerRadius(capsuleRadius);
-                CapsuleBorder.Margin = new System.Windows.Thickness(0, capsuleMarginV, 0, capsuleMarginV);
+                // Full capsule: all corners rounded. Zero margin = edge-to-edge, flush
+                // with the taskbar/app edge (no desktop gap across the width).
+                CapsuleBorder.CornerRadius = rounded
+                    ? new System.Windows.CornerRadius(capsuleRadius)
+                    : new System.Windows.CornerRadius(0);
+                CapsuleBorder.BorderThickness = new System.Windows.Thickness(0);
+
+                // Always flush (edge-to-edge, zero margin) so no desktop shows through.
+                CapsuleBorder.Margin = new System.Windows.Thickness(0);
             }
 
             var presentationSource = PresentationSource.FromVisual(this);
@@ -499,6 +563,7 @@ namespace ClipDropPro
             int heightPx = (int)Math.Round(baseHeight * dpiFactor);
 
             var hwnd = new WindowInteropHelper(this).Handle;
+
             var monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
             MONITORINFO monitorInfo = new MONITORINFO();
             monitorInfo.cbSize = Marshal.SizeOf(monitorInfo);
@@ -513,8 +578,6 @@ namespace ClipDropPro
                 screenWidthPx = monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left;
                 screenHeightPx = monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top;
             }
-
-            bool isTop = _viewModel.ShelfPosition == "Top";
 
             // Query the actual taskbar position so we stack above/below it correctly
             int taskbarEdgePx = -1;
@@ -588,6 +651,22 @@ namespace ClipDropPro
 
             uint flags = SWP_NOACTIVATE | (_isForcedHiddenByFullScreen ? 0u : SWP_SHOWWINDOW);
             SetWindowPos(hwnd, HWND_TOPMOST, xPx, yPx, wPx, hPx, flags);
+
+            // When transparency is ON, the acrylic blur fills the entire rectangular HWND,
+            // causing background to bleed outside the WPF rounded corners.
+            // Fix: physically clip HWND to rounded rectangle ONLY in transparency mode.
+            // When OFF: rectangular HWND sits flush with taskbar — no gap.
+            bool transparencyOn = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
+            if (rounded && transparencyOn)
+            {
+                int radiusPx = (int)Math.Round(capsuleRadius * dpiFactor);
+                IntPtr hRgn = CreateRoundRectRgn(0, 0, wPx, hPx, radiusPx * 2, radiusPx * 2);
+                SetWindowRgn(hwnd, hRgn, true);
+            }
+            else
+            {
+                SetWindowRgn(hwnd, IntPtr.Zero, true);
+            }
 
             // Verify actual window rect after SetWindowPos
             RECT actualRect;
@@ -1031,29 +1110,12 @@ namespace ClipDropPro
             if (_searchBoxBorder != null) return;
             var status = _viewModel.DebugStatus;
             bool active = !string.IsNullOrEmpty(status) && status != "Ready";
-            SearchToggleButton.Visibility = active ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+            // Search button stays visible always
+            SearchToggleButton.Visibility = System.Windows.Visibility.Visible;
 
             // Show/hide status toast popup with animation
-            if (StatusToastPopup != null && StatusToastBorder != null)
-            {
-                StatusToastPopup.PlacementTarget = null;
-                if (active)
-                {
-                    StatusToastPopup.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
-                    StatusToastPopup.IsOpen = true;
-                    // Defer centering so ActualWidth is available after first layout
-                    Dispatcher.BeginInvoke(() =>
-                    {
-                        double shelfCenter = ActualWidth / 2.0;
-                        StatusToastPopup.HorizontalOffset = shelfCenter - StatusToastBorder.ActualWidth / 2.0;
-                    }, System.Windows.Threading.DispatcherPriority.Loaded);
-                    AnimateToastIn();
-                }
-                else
-                {
-                    AnimateToastOut(() => StatusToastPopup.IsOpen = false);
-                }
-            }
+                // Toast disabled to prevent visual flash/movement on click
+                if (StatusToastPopup != null) StatusToastPopup.IsOpen = false;
         }
 
         private void UpdateLayoutForHideClipboard()
@@ -1088,52 +1150,13 @@ namespace ClipDropPro
 
         private void AnimateToastIn()
         {
-            var tg = StatusToastBorder.RenderTransform as System.Windows.Media.TransformGroup;
-            if (tg == null) return;
-            var scale = tg.Children[0] as System.Windows.Media.ScaleTransform;
-            var translate = tg.Children[1] as System.Windows.Media.TranslateTransform;
-
-            var scaleX = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(250))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var scaleY = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(250))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var slideY = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(250))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } };
-            var opacity = new System.Windows.Media.Animation.DoubleAnimation(1, TimeSpan.FromMilliseconds(200));
-
-            StatusToastBorder.Opacity = 0;
-            StatusToastBorder.BeginAnimation(OpacityProperty, opacity);
-            if (scale != null) { scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleX); scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleY); }
-            if (translate != null) translate.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, slideY);
+            StatusToastBorder.Opacity = 1;
         }
 
         private void AnimateToastOut(Action onComplete)
         {
-            var tg = StatusToastBorder.RenderTransform as System.Windows.Media.TransformGroup;
-            if (tg == null) { onComplete?.Invoke(); return; }
-            var scale = tg.Children[0] as System.Windows.Media.ScaleTransform;
-            var translate = tg.Children[1] as System.Windows.Media.TranslateTransform;
-
-            var scaleX = new System.Windows.Media.Animation.DoubleAnimation(0.8, TimeSpan.FromMilliseconds(180))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var scaleY = new System.Windows.Media.Animation.DoubleAnimation(0.8, TimeSpan.FromMilliseconds(180))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var slideY = new System.Windows.Media.Animation.DoubleAnimation(10, TimeSpan.FromMilliseconds(180))
-            { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseIn } };
-            var opacity = new System.Windows.Media.Animation.DoubleAnimation(0, TimeSpan.FromMilliseconds(150));
-
-            StatusToastBorder.BeginAnimation(OpacityProperty, opacity);
-            if (scale != null) { scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleX); scale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleY); }
-            if (translate != null)
-            {
-                var anim = slideY;
-                anim.Completed += (s, e) => onComplete?.Invoke();
-                translate.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, anim);
-            }
-            else
-            {
-                onComplete?.Invoke();
-            }
+            StatusToastBorder.Opacity = 0;
+            onComplete?.Invoke();
         }
 
         private void UpdateTheme()
@@ -1151,21 +1174,23 @@ namespace ClipDropPro
             if (RootGrid != null)
                 RootGrid.Background = System.Windows.Media.Brushes.Transparent;
 
+            bool transparencyEnabled = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
+
             // ── Transparent Mode ──────────────────────────────────────────────
             if (theme == "Transparent")
             {
-                SetResource("AppBackground", System.Windows.Media.Brushes.Transparent);
+                SetResource("AppBackground", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF))); // fully transparent bar — no tint, no border
                 SetResource("TextColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
                 SetResource("IconColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.White));
-                SetResource("CardBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)));
+                SetResource("CardBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x02, 0xFF, 0xFF, 0xFF)));
                 SetResource("CardItemBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)));
-                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF)));
-                SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF)));
-                SetResource("BorderColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)));
+                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x02, 0xFF, 0xFF, 0xFF)));
+                SetResource("ControlBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)));
+                SetResource("BorderColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))); // clear item outline — capsule bar stays borderless
                 SetResource("AccentColor", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF)));
                 SetResource("AccentColorDim", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF)));
                 SetResource("MenuBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x18, 0x18, 0x18)));
-                SetResource("ToolTipBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x10, 0x10, 0x10)));
+                SetResource("ToolTipBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(245, 30, 30, 30)));
                 SetResource("WindowBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x00, 0x00, 0x00, 0x00)));
                 SetResource("ShadowOpacity", 0.0d);   // No shadow — bar is invisible
                 SetResource("ShadowColor", System.Windows.Media.Colors.Black);
@@ -1175,9 +1200,9 @@ namespace ClipDropPro
                     System.Windows.Media.Colors.Transparent, System.Windows.Media.Colors.Transparent,
                     new System.Windows.Point(0, 0), new System.Windows.Point(1, 0));
                 transparentGradient.GradientStops.Clear();
-                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0xB3, 0x60, 0xCD, 0xFF), 0.0));
-                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x40, 0x60, 0xCD, 0xFF), 0.6));
-                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF), 1.0));
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x60, 0x60, 0xCD, 0xFF), 0.0));
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x20, 0x60, 0xCD, 0xFF), 0.6));
+                transparentGradient.GradientStops.Add(new System.Windows.Media.GradientStop(System.Windows.Media.Color.FromArgb(0x04, 0xFF, 0xFF, 0xFF), 1.0));
                 SetResource("SelectedItemGradient", transparentGradient);
             }
             else
@@ -1193,13 +1218,20 @@ namespace ClipDropPro
                 // Solid colors — no acrylic/blur in either mode
                 // Dark mode uses a subtle vertical gradient for depth instead of flat #141414
                 System.Windows.Media.Brush shelfBrush;
-                if (isLightTheme)
+                if (transparencyEnabled)
+                {
+                    // Frosted glass: semi-opaque fill over the raised/blurred background
+                    // so the desktop doesn't show through too clearly.
+                    shelfBrush = isLightTheme
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0x22, 0x22, 0x26));
+                }
+                else if (isLightTheme)
                 {
                     shelfBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0xFF, 0xFF));
                 }
                 else
                 {
-                    // Dark mode: Win11 Start-menu tone — desaturated blue-grey
                     var darkGrad = new System.Windows.Media.LinearGradientBrush(
                         System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x26),
                         System.Windows.Media.Color.FromRgb(0x18, 0x18, 0x1C),
@@ -1219,28 +1251,32 @@ namespace ClipDropPro
                 if (isLightTheme)
                 {
                     // Light: soft warm-white tint matching the reference design
-                    cardItemBg = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEE, 0xF7, 0xF2, 0xEC));
+                    cardItemBg = transparencyEnabled
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xDE, 0xF7, 0xF2, 0xEC))
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEE, 0xF7, 0xF2, 0xEC));
                 }
                 else
                 {
                     // Dark: flat elevated surface, lighter than shelf
-                    cardItemBg = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x2C, 0x2C, 0x32));
+                    cardItemBg = transparencyEnabled
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xDE, 0x2C, 0x2C, 0x32))
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x2C, 0x2C, 0x32));
                 }
                 var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(0x10, 0x00, 0x00, 0x00)
                     : System.Windows.Media.Color.FromArgb(0x08, 0xFF, 0xFF, 0xFF));
                 var controlBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                    ? System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00)
-                    : System.Windows.Media.Color.FromArgb(0xFF, 0x38, 0x38, 0x40));
+                    ? (transparencyEnabled ? System.Windows.Media.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF) : System.Windows.Media.Color.FromArgb(0x33, 0x00, 0x00, 0x00))
+                    : (transparencyEnabled ? System.Windows.Media.Color.FromArgb(0x88, 0x38, 0x38, 0x40) : System.Windows.Media.Color.FromArgb(0xFF, 0x38, 0x38, 0x40)));
                 var borderColor = new System.Windows.Media.SolidColorBrush(isLightTheme
-                    ? System.Windows.Media.Color.FromArgb(30, 0, 0, 0)
-                    : System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
+                    ? System.Windows.Media.Color.FromArgb(0x66, 0x00, 0x78, 0xD4)
+                    : System.Windows.Media.Color.FromArgb(0x66, 0x60, 0xCD, 0xFF));
                 var menuBg = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromRgb(0xFA, 0xFA, 0xFA)
                     : System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x1E));
-                var tooltipBg = new System.Windows.Media.SolidColorBrush(isLightTheme
-                    ? System.Windows.Media.Color.FromArgb(245, 250, 250, 250)
-                    : System.Windows.Media.Color.FromArgb(245, 30, 30, 30));
+                var tooltipBg = transparencyEnabled
+                    ? new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromArgb(0xEE, 250, 250, 250) : System.Windows.Media.Color.FromArgb(0xEE, 30, 30, 30))
+                    : new System.Windows.Media.SolidColorBrush(isLightTheme ? System.Windows.Media.Color.FromArgb(245, 250, 250, 250) : System.Windows.Media.Color.FromArgb(245, 30, 30, 30));
                 var accentColor = new System.Windows.Media.SolidColorBrush(isLightTheme
                     ? System.Windows.Media.Color.FromArgb(0xFF, 0x00, 0x78, 0xD4)
                     : System.Windows.Media.Color.FromArgb(0xFF, 0x60, 0xCD, 0xFF));
@@ -1253,8 +1289,7 @@ namespace ClipDropPro
                 SetResource("IconColor", iconColor);
                 SetResource("CardBg", cardBg);
                 SetResource("CardItemBg", cardItemBg);
-                SetResource("WidgetBg", new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(
-                    isLightTheme ? (byte)0x08 : (byte)0x03, 0xFF, 0xFF, 0xFF)));
+                SetResource("WidgetBg", System.Windows.Media.Brushes.Transparent);
                 SetResource("ControlBg", controlBg);
                 SetResource("BorderColor", borderColor);
                 SetResource("MenuBg", menuBg);
@@ -1295,6 +1330,8 @@ namespace ClipDropPro
 
             // Force visual tree to re-evaluate DynamicResource references
             ForceRefreshVisualTree(this);
+
+            EnableAcrylic();
 
             Log("Theme updated.");
         }
@@ -1709,6 +1746,13 @@ namespace ClipDropPro
 
         private void Window_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
+            // Prevent item click if a button handled the event (e.g. URL open button)
+            if (_isInternalButtonClick)
+            {
+                _isInternalButtonClick = false;
+                return;
+            }
+
             if (e.ChangedButton == MouseButton.Left && _isPotentialClick && _clickedItem != null)
             {
                 _isPotentialClick = false;
@@ -1809,108 +1853,8 @@ namespace ClipDropPro
 
         private void Item_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
-            Log($"PreviewMouseMove: LeftButton={e.LeftButton}");
-            if (e.LeftButton == MouseButtonState.Pressed && _dragStartPoint != default)
-            {
-                System.Windows.Point mousePos = e.GetPosition(null);
-                Vector diff = _dragStartPoint - mousePos;
-                Log($"PreviewMouseMove: diff={diff.Length:F1} start={_dragStartPoint} pos={mousePos}");
-
-                if (Math.Abs(diff.X) > 5 || Math.Abs(diff.Y) > 5)
-                {
-                    _isPotentialClick = false;
-                    if (sender is FrameworkElement element && element.DataContext is ClipboardItem item)
-                    {
-                        // Ctrl + drag to delete
-                        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
-                        {
-                            _ctrlDragCancelled = false;
-                            element.Opacity = 0.3;
-                            ShowDragPopup(element, item);
-                            var deleteData = new System.Windows.DataObject("ClipDropItemDelete", item);
-                            System.Windows.DragDrop.AddQueryContinueDragHandler(element, QueryContinueDragHandler);
-                            System.Windows.DragDrop.AddGiveFeedbackHandler(element, GiveFeedbackHandler);
-                            System.Windows.DragDrop.DoDragDrop(element, deleteData, System.Windows.DragDropEffects.Move);
-                            System.Windows.DragDrop.RemoveGiveFeedbackHandler(element, GiveFeedbackHandler);
-                            System.Windows.DragDrop.RemoveQueryContinueDragHandler(element, QueryContinueDragHandler);
-
-                            CloseDragPopup();
-                            element.Opacity = 1.0;
-                            if (!_ctrlDragCancelled)
-                            {
-                                // Check if dropped back on shelf — if so, cancel deletion
-                                var pt = Win32GetCursorPos();
-                                var presentationSource = PresentationSource.FromVisual(this);
-                                double dpiFactor = presentationSource?.CompositionTarget.TransformToDevice.M22 ?? 1.0;
-                                var shelfRect = new System.Drawing.Rectangle(
-                                    (int)(this.Left * dpiFactor), (int)(this.Top * dpiFactor),
-                                    (int)Math.Max(this.ActualWidth * dpiFactor, 1), (int)Math.Max(this.ActualHeight * dpiFactor, 1));
-                                if (!shelfRect.Contains(new System.Drawing.Point((int)pt.X, (int)pt.Y)))
-                                    _ = _viewModel.DeleteItemCommand.ExecuteAsync(item);
-                            }
-                            return;
-                        }
-
-                        string tempFilePath = null;
-                        Log("DragStart: preparing drag data");
-
-                        if (item.IsImage && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
-                        {
-                            // Image drag: use ORIGINAL file path (more compatible with target apps
-                            // like opencode, browsers, etc.) + Bitmap for live preview.
-                            // DIB is opt-in (off by default) because some apps (e.g. opencode) get
-                            // confused when Bitmap + DIB + FileDrop are all present and report
-                            // "Failed to send" / "Failed to fetch" even though the file uploads.
-                            bool includeDib = _viewModel?.SettingsViewModel?.IncludeDIBInDrag ?? false;
-                            var data = new System.Windows.DataObject();
-                            data.SetData("ClipDropShelfOrigin", item);
-                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { item.FilePath });
-                            using (var bmp = new System.Drawing.Bitmap(item.FilePath))
-                            {
-                                data.SetData(System.Windows.DataFormats.Bitmap, bmp);
-                                if (includeDib)
-                                {
-                                    using (var ms = new System.IO.MemoryStream())
-                                    {
-                                        bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                                        var dib = new byte[ms.Length - 14];
-                                        System.Buffer.BlockCopy(ms.GetBuffer(), 14, dib, 0, dib.Length);
-                                        data.SetData("DeviceIndependentBitmap", new System.IO.MemoryStream(dib));
-                                    }
-                                }
-                            }
-                            Log($"DragImage: {System.IO.Path.GetFileName(item.FilePath)} + Bitmap{(includeDib ? " + DIB" : "")}");
-                            var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
-                            Log($"DragEnd: result={result}");
-                        }
-                        else if (item.IsFile && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
-                        {
-                            // Non-image file drag: use ORIGINAL file path (more compatible with target apps)
-                            var data = new System.Windows.DataObject();
-                            data.SetData("ClipDropShelfOrigin", item);
-                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { item.FilePath });
-                            Log($"DragFile: {System.IO.Path.GetFileName(item.FilePath)}");
-                            var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
-                            Log($"DragEnd: result={result}");
-                        }
-                        else if (!string.IsNullOrEmpty(item.TextContent))
-                        {
-                            // Text drag: only set text formats
-                            var data = new System.Windows.DataObject();
-                            data.SetData("ClipDropShelfOrigin", item);
-                            data.SetData(System.Windows.DataFormats.UnicodeText, item.TextContent);
-                            data.SetText(item.TextContent);
-                            Log($"DragText: {item.TextContent.Substring(0, Math.Min(40, item.TextContent.Length))}");
-                            var result = System.Windows.DragDrop.DoDragDrop(element, data, System.Windows.DragDropEffects.Copy);
-                            Log($"DragEnd: result={result}");
-                        }
-                    }
-                }
-            }
-            else
-            {
-                _dragStartPoint = e.GetPosition(null);
-            }
+            // Drag disabled to prevent item movement on click
+            return;
         }
 
         private bool _ctrlDragCancelled;
@@ -2735,8 +2679,10 @@ namespace ClipDropPro
                         ? item.TextContent
                         : "https://" + item.TextContent;
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri) { UseShellExecute = true });
+                    item.StatusText = "Opening URL...";
                     _viewModel.DebugStatus = "Opening URL...";
                     await Task.Delay(1000);
+                    item.StatusText = "";
                     _viewModel.DebugStatus = "Ready";
                 }
                 catch { }
@@ -2745,7 +2691,7 @@ namespace ClipDropPro
 
         private void OpenUrl_PreviewMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
-            e.Handled = true;
+            _isInternalButtonClick = true;
         }
         #endregion
     }

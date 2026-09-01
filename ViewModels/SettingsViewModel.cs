@@ -40,6 +40,10 @@ namespace ClipDropPro.ViewModels
             _silentAutoUpdate = _settingsService.SilentAutoUpdate;
             _hideClipboard = _settingsService.HideClipboard;
             _includeDIBInDrag = _settingsService.IncludeDIBInDrag;
+            _transparencyEffect = _settingsService.TransparencyEffect;
+            _followSystemTransparency = _settingsService.FollowSystemTransparency;
+            // Follow Windows transparency when the app uses System theme
+            SyncSystemTransparency();
             // Build pinned zone items (BD + AZ pinned by default)
             var pinned = _settingsService.PinnedWorldClockZones ?? new System.Collections.Generic.List<string>();
             WorldClockPinItems = new ObservableCollection<WorldClockZonePinItem>(
@@ -89,8 +93,12 @@ namespace ClipDropPro.ViewModels
             get => _settingsService.Theme;
             set
             {
+                var previous = _settingsService.Theme;
                 _settingsService.Theme = value;
                 OnPropertyChanged();
+                // Follow Windows transparency when switching TO the System theme
+                if (value == "System" && previous != "System")
+                    SyncSystemTransparency();
                 // Theme colors are handled by MainWindow.UpdateTheme() via DynamicResource overrides.
                 // No ApplicationThemeManager.Apply() call needed — base theme is set once in App.xaml.cs.
             }
@@ -328,6 +336,59 @@ namespace ClipDropPro.ViewModels
         partial void OnIncludeDIBInDragChanged(bool value)
         {
             _settingsService.IncludeDIBInDrag = value;
+        }
+
+        [ObservableProperty]
+        private bool _transparencyEffect = false;
+
+        partial void OnTransparencyEffectChanged(bool value)
+        {
+            _settingsService.TransparencyEffect = value;
+        }
+
+        [ObservableProperty]
+        private bool _followSystemTransparency = true;
+
+        partial void OnFollowSystemTransparencyChanged(bool value)
+        {
+            _settingsService.FollowSystemTransparency = value;
+            if (value)
+            {
+                // Re-apply Windows transparency state immediately when enabling the follow option
+                if (_settingsService.Theme == "System")
+                    SyncSystemTransparency();
+            }
+        }
+
+        /// <summary>
+        /// Reads the Windows "Transparency effects" toggle (same Personalize registry key
+        /// that types dark/light) and mirrors it into TransparencyEffect when the app uses
+        /// the System theme and FollowSystemTransparency is enabled.
+        /// </summary>
+        public void SyncSystemTransparency()
+        {
+            if (_settingsService.Theme != "System" || !_settingsService.FollowSystemTransparency) return;
+            try
+            {
+                var raw = Microsoft.Win32.Registry.GetValue(
+                    @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+                    "EnableTransparency", 1);
+                TransparencyEffect = !(raw is int i && i == 0);
+            }
+            catch
+            {
+                // Registry unavailable — leave the user's current choice untouched.
+            }
+        }
+
+        public bool RoundedCorners
+        {
+            get => _settingsService.RoundedCorners;
+            set
+            {
+                _settingsService.RoundedCorners = value;
+                OnPropertyChanged();
+            }
         }
 
         [ObservableProperty]

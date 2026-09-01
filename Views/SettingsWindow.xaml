@@ -373,13 +373,64 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="App theme" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="App Mode" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
                             <TextBlock Text="Select which app theme to display" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
                         <ComboBox Grid.Column="2" Width="120" VerticalAlignment="Center"
                                   ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
                                   Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"
                                   SelectionChanged="ThemeComboBox_SelectionChanged"/>
+                    </Grid>
+                </Border>
+
+                <!-- Transparency effect -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7F7;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Transparency effect" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Enable Windows 11 acrylic glass effect in Light or Dark mode" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding TransparencyEffect}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Follow Windows translucency (System mode) -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Follow Windows translucency" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="In System mode, enable the effect automatically when Windows has transparency on" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding FollowSystemTransparency}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Rounded Corners -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Rounded corners" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Keep capsule shelf rounded in any mode" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding RoundedCorners}" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
 

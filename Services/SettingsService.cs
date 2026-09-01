@@ -41,6 +41,9 @@ namespace ClipDropPro.Services
         public bool SilentAutoUpdate { get; set; } = false;
         public bool HideClipboard { get; set; } = false;
         public bool IncludeDIBInDrag { get; set; } = false;
+        public bool TransparencyEffect { get; set; } = false;
+        public bool FollowSystemTransparency { get; set; } = true;
+        public bool RoundedCorners { get; set; } = true;
     }
 
     public class SettingsService : ISettingsService
@@ -298,6 +301,24 @@ namespace ClipDropPro.Services
         {
             get => _settings.IncludeDIBInDrag;
             set { _settings.IncludeDIBInDrag = value; Save(); }
+        }
+
+        public bool TransparencyEffect
+        {
+            get => _settings.TransparencyEffect;
+            set { _settings.TransparencyEffect = value; Save(); }
+        }
+
+        public bool FollowSystemTransparency
+        {
+            get => _settings.FollowSystemTransparency;
+            set { _settings.FollowSystemTransparency = value; Save(); }
+        }
+
+        public bool RoundedCorners
+        {
+            get => _settings.RoundedCorners;
+            set { _settings.RoundedCorners = value; Save(); }
         }
     }
 }

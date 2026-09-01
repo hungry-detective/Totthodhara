@@ -507,27 +507,27 @@ namespace ClipDropPro.ViewModels
                 byte[] bytes = null;
                 string ext = "ico";
 
-                // 1) Try HTML page parsing first — most reliable, gets the actual favicon URL
-                try
+                // 1) Special handling for known services with specific icons (fast/reliable)
+                string knownIconUrl = GetKnownFaviconUrl(host, fullUrl);
+                if (knownIconUrl != null)
                 {
-                    string html = await _httpClient.GetStringAsync(item.TextContent);
-                    bytes = ExtractFaviconFromHtml(html, uriResult, out ext);
+                    try
+                    {
+                        bytes = await _httpClient.GetByteArrayAsync(knownIconUrl);
+                        ext = "png";
+                    }
+                    catch { }
                 }
-                catch { }
 
-                // 2) Special handling for known services with specific icons
+                // 2) Try HTML page parsing — most reliable for unknown sites
                 if (bytes == null || bytes.Length <= 10)
                 {
-                    string knownIconUrl = GetKnownFaviconUrl(host, fullUrl);
-                    if (knownIconUrl != null)
+                    try
                     {
-                        try
-                        {
-                            bytes = await _httpClient.GetByteArrayAsync(knownIconUrl);
-                            ext = "png";
-                        }
-                        catch { }
+                        string html = await _httpClient.GetStringAsync(item.TextContent);
+                        bytes = ExtractFaviconFromHtml(html, uriResult, out ext);
                     }
+                    catch { }
                 }
 
                 // 3) Fallback: Google S2 favicon service
@@ -589,7 +589,7 @@ namespace ClipDropPro.ViewModels
                 // Find <link rel="icon" ...> or <link rel="shortcut icon" ...> tags
                 var matches = System.Text.RegularExpressions.Regex.Matches(
                     html,
-                    @"<link[^>]+rel\s*=\s*[""']?(?:shortcut\s+)?icon[""']?[^>]*>",
+                    @"<link[^>]+rel\s*=\s*[""']?(?:shortcut\s+|alternate\s+)?icon[""']?[^>]*>",
                     System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
                 string bestUrl = null;
@@ -622,14 +622,17 @@ namespace ClipDropPro.ViewModels
 
                         if (size >= bestSize)
                         {
+                            // Skip SVG (WPF BitmapImage doesn't support it)
+                            var urlPath = resolved.AbsolutePath.ToLower();
+                            if (urlPath.EndsWith(".svg")) continue;
+
                             bestSize = size;
                             bestUrl = resolved.ToString();
-                            // Detect extension
-                            var path = resolved.AbsolutePath.ToLower();
-                            if (path.EndsWith(".png")) ext = "png";
-                            else if (path.EndsWith(".svg")) ext = "svg";
-                            else if (path.EndsWith(".jpg") || path.EndsWith(".jpeg")) ext = "jpg";
-                            else if (path.EndsWith(".gif")) ext = "gif";
+
+                            // Detect extension for best compatibility
+                            if (urlPath.EndsWith(".png")) ext = "png";
+                            else if (urlPath.EndsWith(".jpg") || urlPath.EndsWith(".jpeg")) ext = "jpg";
+                            else if (urlPath.EndsWith(".gif")) ext = "gif";
                             else ext = "ico";
                         }
                     }
@@ -691,6 +694,10 @@ namespace ClipDropPro.ViewModels
             // Stack Overflow
             if (host == "stackoverflow.com" || host.EndsWith(".stackoverflow.com"))
                 return "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=32";
+
+            // Lichess
+            if (host == "lichess.org" || host.EndsWith(".lichess.org"))
+                return "https://lichess1.org/assets/logo/lichess-favicon-64.png";
 
             return null;
         }
@@ -1224,23 +1231,27 @@ namespace ClipDropPro.ViewModels
                                 winFormData.SetImage(bmp);
                             }
                             System.Windows.Forms.Clipboard.SetDataObject(winFormData, true);
+                            item.StatusText = "Image Copied!";
                             DebugStatus = "Image + File Copied!";
                         }
                         catch (Exception iex)
                         {
                             Log($"Image+file copy failed: {iex.Message}");
                             await CopyAsFileDrop(item);
+                            item.StatusText = "File Copied!";
                         }
                     }
                     else
                     {
                         await CopyAsFileDrop(item);
+                        item.StatusText = "File Copied!";
                     }
                 }
                 else
                 {
                     Log("Copying text to clipboard...");
                     System.Windows.Clipboard.SetText(item.TextContent ?? item.DisplayText);
+                    item.StatusText = "Copied!";
                     DebugStatus = "Copied!";
                 }
 
@@ -1249,7 +1260,7 @@ namespace ClipDropPro.ViewModels
                 Log("Simulating Paste...");
                 SendKeys.SendWait("^v");
 
-                _ = Task.Delay(1000).ContinueWith(_ => DebugStatus = "Ready");
+                _ = Task.Delay(1000).ContinueWith(_ => { item.StatusText = ""; DebugStatus = "Ready"; IsInternalChange = false; });
             }
             catch (Exception ex)
             {
@@ -1405,9 +1416,9 @@ namespace ClipDropPro.ViewModels
             
             try 
             {
-                // Trigger removal animation
+                // Trigger removal animation (shorter for faster response)
                 item.IsRemoving = true;
-                await Task.Delay(300); // Match storyboard duration
+                await Task.Delay(100);
 
                 if (item.IsFile && !string.IsNullOrEmpty(item.FilePath))
                 {
@@ -1448,7 +1459,7 @@ namespace ClipDropPro.ViewModels
                     }
                     Log("Items re-indexed after removal.");
                     DebugStatus = "Deleted!";
-                    _ = Task.Delay(1000).ContinueWith(_ => DebugStatus = "Ready");
+                _ = Task.Delay(1000).ContinueWith(_ => { DebugStatus = "Ready"; item.StatusText = ""; IsInternalChange = false; });
                 });
             }
             catch (Exception ex)
