@@ -506,7 +506,7 @@
                                     </Grid>
 
                                     <!-- Icon Column -->
-                                    <Border Grid.Column="1" Width="{DynamicResource ItemIconSize}" Height="{DynamicResource ItemIconSize}" CornerRadius="4" Margin="0,2,4,0" VerticalAlignment="Center">
+                                    <Border Grid.Column="1" Width="{DynamicResource ItemIconSize}" Height="{DynamicResource ItemIconSize}" CornerRadius="4" Margin="0,0,4,0" VerticalAlignment="Center">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Visibility" Value="{Binding HasIcon, Converter={StaticResource BoolToVis}}"/>
