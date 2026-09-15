@@ -10,7 +10,6 @@ using System.Windows.Interop;
 using ClipDropPro.Models;
 using ClipDropPro.ViewModels;
 using ClipDropPro.Plugins;
-using Wpf.Ui.Appearance;
 using System.Windows.Media;
 
 namespace ClipDropPro
@@ -382,25 +381,15 @@ namespace ClipDropPro
         }
 
         static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        static readonly IntPtr HWND_BOTTOM = new IntPtr(1);
-        const uint SWP_NOSIZE = 0x0001;
-        const uint SWP_NOMOVE = 0x0002;
         const uint SWP_NOACTIVATE = 0x0010;
         const uint SWP_SHOWWINDOW = 0x0040;
 
         private const int GWL_EXSTYLE = -20;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int SW_SHOWNOACTIVATE = 4;
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool DestroyIcon(IntPtr hIcon);
-
-        [DllImport("user32.dll")]
-        static extern uint GetDpiForWindow(IntPtr hwnd);
-
-        [DllImport("user32.dll", EntryPoint = "ShowWindow")]
-        static extern bool NativeShowWindow(IntPtr hWnd, int nCmdShow);
 
         private void DisableNoActivate()
         {
@@ -428,9 +417,6 @@ namespace ClipDropPro
         [DllImport("gdi32.dll", EntryPoint = "DeleteObject")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool DeleteObject([In] IntPtr hObject);
-
-        [DllImport("gdi32.dll")]
-        public static extern IntPtr CreateRoundRectRgn(int nLeftRect, int nTopRect, int nRightRect, int nBottomRect, int nWidthEllipse, int nHeightEllipse);
 
         [DllImport("user32.dll")]
         public static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
@@ -475,7 +461,14 @@ namespace ClipDropPro
             if (handle == IntPtr.Zero) return;
 
             bool enabled = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
-            AccentState state = enabled ? AccentState.ACCENT_ENABLE_ACRYLICBLURBEHIND : AccentState.ACCENT_DISABLED;
+            // NOTE (verified visually 2026-09): real DWM acrylic (ACRYLICBLURBEHIND)
+            // paints the ENTIRE rectangular HWND, filling the rounded-corner cutouts
+            // with blur — SetWindowRgn round-rect clipping does NOT prevent it, so
+            // corners look filled/square in transparency mode. Transparency is
+            // therefore frosted BRUSHES ONLY (0xE6 fills over a sharp desktop):
+            // near-identical on a 32px bar, with pixel-crisp corners. Do NOT
+            // re-enable ACRYLICBLURBEHIND without checking corners on wallpaper.
+            AccentState state = AccentState.ACCENT_DISABLED;
 
             var theme = _viewModel?.SettingsViewModel?.Theme ?? "Dark";
             bool isLightTheme = theme == "Light";
@@ -652,21 +645,11 @@ namespace ClipDropPro
             uint flags = SWP_NOACTIVATE | (_isForcedHiddenByFullScreen ? 0u : SWP_SHOWWINDOW);
             SetWindowPos(hwnd, HWND_TOPMOST, xPx, yPx, wPx, hPx, flags);
 
-            // When transparency is ON, the acrylic blur fills the entire rectangular HWND,
-            // causing background to bleed outside the WPF rounded corners.
-            // Fix: physically clip HWND to rounded rectangle ONLY in transparency mode.
-            // When OFF: rectangular HWND sits flush with taskbar — no gap.
-            bool transparencyOn = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
-            if (rounded && transparencyOn)
-            {
-                int radiusPx = (int)Math.Round(capsuleRadius * dpiFactor);
-                IntPtr hRgn = CreateRoundRectRgn(0, 0, wPx, hPx, radiusPx * 2, radiusPx * 2);
-                SetWindowRgn(hwnd, hRgn, true);
-            }
-            else
-            {
-                SetWindowRgn(hwnd, IntPtr.Zero, true);
-            }
+            // No HWND region clip: with DWM blur disabled there is nothing to
+            // contain, and CreateRoundRectRgn is a 1-bit mask that staircases the
+            // corners ("pixel art"). WPF anti-aliases the rounded corners on its
+            // own. NULL clears any stale region; rectangular HWND sits flush.
+            SetWindowRgn(hwnd, IntPtr.Zero, true);
 
             // Verify actual window rect after SetWindowPos
             RECT actualRect;
@@ -705,9 +688,12 @@ namespace ClipDropPro
             uCallbackMessage = RegisterWindowMessage("AppBarMessage");
             RegisterAppBar();
 
-            // Initialize full-screen detection timer
+            // Initialize full-screen detection timer (50ms: hide the shelf the
+            // instant a fullscreen video/game covers the screen. Detection is
+            // stateless/immediate, and each tick is only ~6 cheap P/Invokes, so
+            // 20 wakeups/sec costs essentially nothing measurable.)
             _fullScreenCheckTimer = new System.Windows.Threading.DispatcherTimer();
-            _fullScreenCheckTimer.Interval = TimeSpan.FromMilliseconds(100);
+            _fullScreenCheckTimer.Interval = TimeSpan.FromMilliseconds(50);
             _fullScreenCheckTimer.Tick += FullScreenCheckTimer_Tick;
             _fullScreenCheckTimer.Start();
         }
@@ -798,6 +784,9 @@ namespace ClipDropPro
             }
         }
 
+        // Reused across fullscreen ticks to avoid a Gen0 alloc per tick
+        private readonly System.Text.StringBuilder _classNameBuilder = new System.Text.StringBuilder(256);
+
         private void FullScreenCheckTimer_Tick(object sender, EventArgs e)
         {
             IntPtr foregroundWindow = GetForegroundWindow();
@@ -814,7 +803,8 @@ namespace ClipDropPro
             if (foregroundWindow == myHandle) return;
 
             // Simple check for Shell windows (Taskbar, Desktop, etc.)
-            className = new System.Text.StringBuilder(256);
+            className = _classNameBuilder;
+            className.Clear();
             GetClassName(foregroundWindow, className, className.Capacity);
             string shellCls = className.ToString();
             if (shellCls == "Shell_TrayWnd" || shellCls == "WorkerW" || shellCls == "Progman")
@@ -981,12 +971,6 @@ namespace ClipDropPro
             }
         }
 
-        private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            if (e.ChangedButton == MouseButton.Left)
-                DragMove();
-        }
-
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // Setup Tray Icon now that window HWND exists
@@ -1148,17 +1132,6 @@ namespace ClipDropPro
             }
         }
 
-        private void AnimateToastIn()
-        {
-            StatusToastBorder.Opacity = 1;
-        }
-
-        private void AnimateToastOut(Action onComplete)
-        {
-            StatusToastBorder.Opacity = 0;
-            onComplete?.Invoke();
-        }
-
         private void UpdateTheme()
         {
             if (_viewModel?.SettingsViewModel == null) return;
@@ -1215,16 +1188,17 @@ namespace ClipDropPro
                     isLightTheme = registryValue != null && (int)registryValue == 1;
                 }
 
-                // Solid colors — no acrylic/blur in either mode
+                // Frosted fills layered over live DWM acrylic blur (see EnableAcrylic).
                 // Dark mode uses a subtle vertical gradient for depth instead of flat #141414
                 System.Windows.Media.Brush shelfBrush;
                 if (transparencyEnabled)
                 {
-                    // Frosted glass: semi-opaque fill over the raised/blurred background
-                    // so the desktop doesn't show through too clearly.
+                    // Frosted glass: deep fill over the blurred background so the
+                    // capsule silhouette (incl. rounded corners) reads clearly.
+                    // 0xE6 keeps the glass feel while restoring edge contrast.
                     shelfBrush = isLightTheme
-                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF))
-                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xCC, 0x22, 0x22, 0x26));
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF))
+                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x22, 0x22, 0x26));
                 }
                 else if (isLightTheme)
                 {
@@ -1252,14 +1226,14 @@ namespace ClipDropPro
                 {
                     // Light: soft warm-white tint matching the reference design
                     cardItemBg = transparencyEnabled
-                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xDE, 0xF7, 0xF2, 0xEC))
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEC, 0xF7, 0xF2, 0xEC))
                         : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEE, 0xF7, 0xF2, 0xEC));
                 }
                 else
                 {
                     // Dark: flat elevated surface, lighter than shelf
                     cardItemBg = transparencyEnabled
-                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xDE, 0x2C, 0x2C, 0x32))
+                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xEC, 0x2C, 0x2C, 0x32))
                         : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xFF, 0x2C, 0x2C, 0x32));
                 }
                 var cardBg = new System.Windows.Media.SolidColorBrush(isLightTheme
@@ -1843,14 +1817,6 @@ namespace ClipDropPro
         const int INPUT_KEYBOARD = 1;
         const uint KEYEVENTF_KEYUP = 0x0002;
 
-        private async void DeleteItem_Click(object sender, RoutedEventArgs e)
-        {
-            if (sender is FrameworkElement element && element.DataContext is ClipboardItem item)
-            {
-                await _viewModel.DeleteItemCommand.ExecuteAsync(item);
-            }
-        }
-
         private void Item_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
         {
             // Drag disabled to prevent item movement on click
@@ -1969,65 +1935,7 @@ namespace ClipDropPro
             }
         }
 
-        private System.Windows.Point _dragStartPoint;
-        private void ListView_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            // Just selection tracking
-        }
-
         private bool _isInternalButtonClick = false;
-        private void Button_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-        {
-            _isInternalButtonClick = true;
-            Console.WriteLine("Button PreviewDown detected.");
-        }
-
-        private void ListView_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
-        {
-            if (e.LeftButton == MouseButtonState.Pressed)
-            {
-                // If we detected a button press, definitely don't start a drag
-                if (_isInternalButtonClick) return;
-
-                System.Windows.Point mousePos = e.GetPosition(null);
-                Vector diff = _dragStartPoint - mousePos;
-
-                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance * 2 ||
-                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance * 2)
-                {
-                    if (sender is System.Windows.Controls.ListView listView && listView.SelectedItem is ClipboardItem item)
-                    {
-                        string tempFilePath = null;
-                        var data = new System.Windows.DataObject();
-                        if (item.IsFile && !string.IsNullOrEmpty(item.FilePath) && System.IO.File.Exists(item.FilePath))
-                        {
-                            var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "TotthodharaDrag");
-                            try { if (System.IO.Directory.Exists(tempDir)) System.IO.Directory.Delete(tempDir, recursive: true); } catch { }
-                            System.IO.Directory.CreateDirectory(tempDir);
-                            var fileName = !string.IsNullOrEmpty(item.FileName) ? item.FileName : System.IO.Path.GetFileName(item.FilePath);
-                            tempFilePath = System.IO.Path.Combine(tempDir, fileName);
-                            System.IO.File.Copy(item.FilePath, tempFilePath, overwrite: true);
-                            var files = new System.Collections.Specialized.StringCollection { tempFilePath };
-                            data.SetFileDropList(files);
-                            data.SetText(tempFilePath);
-                        }
-                        else if (!string.IsNullOrEmpty(item.TextContent))
-                        {
-                            data.SetText(item.TextContent);
-                        }
-
-                        System.Windows.DragDrop.DoDragDrop(listView, data, System.Windows.DragDropEffects.Copy | System.Windows.DragDropEffects.Move);
-                        // After drag drops, reset.
-                        _isInternalButtonClick = false;
-                    }
-                }
-            }
-            else
-            {
-                _isInternalButtonClick = false;
-                _dragStartPoint = e.GetPosition(null);
-            }
-        }
 
         private void AnimateScroll(double from, double to)
         {
@@ -2529,6 +2437,7 @@ namespace ClipDropPro
 
             var cardBg = System.Windows.Application.Current.Resources["CardBg"] as System.Windows.Media.SolidColorBrush;
             var textColor = System.Windows.Application.Current.Resources["TextColor"] as System.Windows.Media.SolidColorBrush;
+            var borderBrush = System.Windows.Application.Current.Resources["BorderColor"] as System.Windows.Media.Brush;
             var cardColor = cardBg?.Color ?? System.Windows.Media.Color.FromRgb(0x28, 0x28, 0x28);
             var txtColor = textColor?.Color ?? System.Windows.Media.Colors.White;
 
@@ -2570,6 +2479,8 @@ namespace ClipDropPro
             {
                 CornerRadius = new System.Windows.CornerRadius(10),
                 Background = new System.Windows.Media.SolidColorBrush(cardColor),
+                BorderBrush = borderBrush,
+                BorderThickness = new System.Windows.Thickness(0.7),
                 Height = 22,
                 MinHeight = 22,
                 MaxHeight = 22,
@@ -2662,10 +2573,6 @@ namespace ClipDropPro
         private async void PasteAllButton_Click(object sender, RoutedEventArgs e)
         {
             await _viewModel.PasteAllCommand.ExecuteAsync(null);
-        }
-
-        private void MainWindow_Deactivated(object sender, EventArgs e)
-        {
         }
 
         private async void OpenUrl_Click(object sender, RoutedEventArgs e)

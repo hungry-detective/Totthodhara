@@ -118,6 +118,16 @@ namespace ClipDropPro.ViewModels
         private DateTime _lastCaptureTime = DateTime.MinValue;
         private readonly TimeSpan _dedupeWindow = TimeSpan.FromMilliseconds(500);
 
+        // Bullet-proofing: a multi-MB log copy must never bloat the DB, the
+        // in-memory dedupe string, or per-frame binding evaluations.
+        private const int MaxTextLength = 200_000;
+        private static string CapTextLength(string text)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= MaxTextLength)
+                return text;
+            return text.Substring(0, MaxTextLength) + "\n…[truncated — full text was larger than storage limit]";
+        }
+
         private string _searchText = string.Empty;
         public string SearchText
         {
@@ -248,11 +258,10 @@ namespace ClipDropPro.ViewModels
             if (ShowWorldClock)
                 StartWorldClock();
 
-            // Initialize system monitor
+            // Initialize system monitor (polling gated on visible widgets)
             _systemMonitorService.Updated += OnSystemMonitorUpdated;
             ShowSystemMonitor = _settingsService.ShowSystemMonitor;
-            if (ShowSystemMonitor)
-                _systemMonitorService.Start();
+            UpdateMonitorPolling();
 
             // React when settings change from SettingsWindow
             settingsViewModel.PropertyChanged += (s, e) =>
@@ -424,21 +433,74 @@ namespace ClipDropPro.ViewModels
 
         private async Task LoadThumbnailsAsync(List<ClipboardItem> items)
         {
-            foreach (var item in items.Where(x => x.IsImage || x.IsVideo))
+            // Images: decode fully on the thread pool (I/O + WIC decode are the
+            // slow parts), then assign the frozen bitmap on the UI thread.
+            // Videos stay on the UI thread — Shell thumbnail extraction is COM/STA.
+            var imageTasks = items.Where(x => x.IsImage).Select(item => Task.Run(async () =>
             {
                 try
                 {
+                    var (thumb, resolution) = DecodeImageThumbnail(item.FilePath);
+                    if (thumb == null) return;
                     await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
                     {
-                        if (item.IsImage) PopulateImageMetadata(item);
-                        else if (item.IsVideo) PopulateVideoMetadata(item);
-                    }, System.Windows.Threading.DispatcherPriority.Background);
+                        item.ThumbnailSource = thumb;
+                        item.ResolutionText = resolution;
+                    });
                 }
                 catch (Exception ex)
                 {
                     Log($"Thumbnail error {item.Id}: {ex.Message}");
                 }
+            }));
+
+            var videoItems = items.Where(x => x.IsVideo).ToList();
+            var videoTask = Task.Run(async () =>
+            {
+                foreach (var item in videoItems)
+                {
+                    try
+                    {
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            PopulateVideoMetadata(item);
+                        }, System.Windows.Threading.DispatcherPriority.Background);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"Thumbnail error {item.Id}: {ex.Message}");
+                    }
+                }
+            });
+
+            await Task.WhenAll(imageTasks.Append(videoTask));
+        }
+
+        // Pure decode: safe on any thread. Returns a frozen bitmap + resolution,
+        // or (null, "") when the file is missing/unreadable.
+        private static (System.Windows.Media.ImageSource? Thumb, string Resolution) DecodeImageThumbnail(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !System.IO.File.Exists(filePath))
+                return (null, string.Empty);
+
+            // Create a thumbnail to keep memory footprint low
+            var thumb = new System.Windows.Media.Imaging.BitmapImage();
+            thumb.BeginInit();
+            thumb.UriSource = new Uri(filePath);
+            thumb.DecodePixelHeight = 200;
+            thumb.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            thumb.EndInit();
+            thumb.Freeze();
+
+            // Read exact pixel dimensions without fully decoding the massive image into memory
+            string resolution = string.Empty;
+            using (var stream = System.IO.File.OpenRead(filePath))
+            {
+                var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(stream, System.Windows.Media.Imaging.BitmapCreateOptions.DelayCreation, System.Windows.Media.Imaging.BitmapCacheOption.None);
+                if (decoder.Frames.Count > 0)
+                    resolution = $"{decoder.Frames[0].PixelWidth} x {decoder.Frames[0].PixelHeight}";
             }
+            return (thumb, resolution);
         }
 
         private async Task LoadUrlFaviconsAsync(List<ClipboardItem> items)
@@ -525,7 +587,9 @@ namespace ClipDropPro.ViewModels
                     try
                     {
                         string html = await _httpClient.GetStringAsync(item.TextContent);
-                        bytes = ExtractFaviconFromHtml(html, uriResult, out ext);
+                        var fav = await ExtractFaviconFromHtmlAsync(html, uriResult);
+                        bytes = fav.Bytes;
+                        ext = fav.Ext;
                     }
                     catch { }
                 }
@@ -581,9 +645,12 @@ namespace ClipDropPro.ViewModels
             }
         }
 
-        private byte[] ExtractFaviconFromHtml(string html, Uri baseUri, out string ext)
+        // Async throughout: never sync-block on HttpClient (GetAwaiter().GetResult()
+        // would pin a thread-pool thread up to the 5s timeout per favicon).
+        // (Tuple return because async methods cannot have `out` parameters.)
+        private async Task<(byte[]? Bytes, string Ext)> ExtractFaviconFromHtmlAsync(string html, Uri baseUri)
         {
-            ext = "ico";
+            string ext = "ico";
             try
             {
                 // Find <link rel="icon" ...> or <link rel="shortcut icon" ...> tags
@@ -640,11 +707,11 @@ namespace ClipDropPro.ViewModels
 
                 if (bestUrl != null)
                 {
-                    return _httpClient.GetByteArrayAsync(bestUrl).GetAwaiter().GetResult();
+                    return (await _httpClient.GetByteArrayAsync(bestUrl), ext);
                 }
             }
             catch { }
-            return null;
+            return (null, ext);
         }
 
         private async Task LoadFaviconFromCacheAsync(ClipboardItem item, string filePath)
@@ -724,36 +791,6 @@ namespace ClipDropPro.ViewModels
             {
                 item.IconGlyph = string.Empty;
             }
-        }
-
-        private void PopulateImageMetadata(ClipboardItem item)
-        {
-            if (!item.IsImage || string.IsNullOrEmpty(item.FilePath) || !System.IO.File.Exists(item.FilePath))
-                return;
-
-            try
-            {
-                // Create a thumbnail to keep memory footprint low
-                var thumb = new System.Windows.Media.Imaging.BitmapImage();
-                thumb.BeginInit();
-                thumb.UriSource = new Uri(item.FilePath);
-                thumb.DecodePixelHeight = 200; 
-                thumb.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                thumb.EndInit();
-                thumb.Freeze();
-                item.ThumbnailSource = thumb;
-
-                // Read exact pixel dimensions without fully decoding the massive image into memory
-                using (var stream = System.IO.File.OpenRead(item.FilePath))
-                {
-                    var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(stream, System.Windows.Media.Imaging.BitmapCreateOptions.DelayCreation, System.Windows.Media.Imaging.BitmapCacheOption.None);
-                    if (decoder.Frames.Count > 0)
-                    {
-                        item.ResolutionText = $"{decoder.Frames[0].PixelWidth} x {decoder.Frames[0].PixelHeight}";
-                    }
-                }
-            }
-            catch (Exception ex) { Log($"DEBUG: PopulateImageMetadata Exception: {ex.Message}"); }
         }
 
         private void PopulateVideoMetadata(ClipboardItem item)
@@ -875,12 +912,21 @@ namespace ClipDropPro.ViewModels
         partial void OnShowSystemMonitorChanged(bool value)
         {
             _settingsService.ShowSystemMonitor = value;
-            if (value)
+            UpdateMonitorPolling();
+            UpdateNetworkVisibility();
+            UpdateHardwareVisibility();
+        }
+
+        // Central gate: the 2s monitor timer only runs (and only polls the
+        // sensors whose pills are actually visible) when something is shown.
+        private void UpdateMonitorPolling()
+        {
+            _systemMonitorService.CpuEnabled = ShowCpuRamMonitor;
+            _systemMonitorService.NetworkEnabled = ShowNetworkMonitor;
+            if (ShowSystemMonitor && (ShowCpuRamMonitor || ShowNetworkMonitor))
                 _systemMonitorService.Start();
             else
                 _systemMonitorService.Stop();
-            UpdateNetworkVisibility();
-            UpdateHardwareVisibility();
         }
 
         partial void OnShowPluginsChanged(bool value)
@@ -891,6 +937,7 @@ namespace ClipDropPro.ViewModels
         partial void OnShowNetworkMonitorChanged(bool value)
         {
             _settingsService.ShowNetworkMonitor = value;
+            UpdateMonitorPolling();
             UpdateNetworkVisibility();
         }
 
@@ -903,6 +950,7 @@ namespace ClipDropPro.ViewModels
         partial void OnShowCpuRamMonitorChanged(bool value)
         {
             _settingsService.ShowCpuRamMonitor = value;
+            UpdateMonitorPolling();
             UpdateHardwareVisibility();
         }
 
@@ -940,7 +988,10 @@ namespace ClipDropPro.ViewModels
             UpdateWorldClock();
             _worldClockTimer = new System.Windows.Threading.DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(1)
+                // Shelf clocks show minute precision ("hh:mm tt"): 5s keeps the
+                // minute flip snappy and tooltip seconds smooth while waking the
+                // UI thread 12x less often than the old 1s cadence.
+                Interval = TimeSpan.FromSeconds(5)
             };
             _worldClockTimer.Tick += (s, e) => { UpdateWorldClocks(); UpdateWorldClock(); };
             _worldClockTimer.Start();
@@ -1672,7 +1723,6 @@ namespace ClipDropPro.ViewModels
                     Origin = "DragDrop"
                 };
                 await _dataService.AddItemAsync(item);
-                Console.WriteLine($"Added File Item: {item.FileName} at {item.FilePath}");
             }
             await TrimHistoryAsync();
             await LoadItemsAsync();
@@ -1682,6 +1732,7 @@ namespace ClipDropPro.ViewModels
         public async Task HandleDroppedTextAsync(string text)
         {
             if (string.IsNullOrEmpty(text)) return;
+            text = CapTextLength(text);
 
             // Deduplication
             if (text == _lastCapturedContent && (DateTime.Now - _lastCaptureTime) < _dedupeWindow)
@@ -1724,7 +1775,6 @@ namespace ClipDropPro.ViewModels
                     Origin = "DragDrop"
                 };
                 await _dataService.AddItemAsync(item);
-                Console.WriteLine($"Added Text Item: {item.TextContent.Substring(0, Math.Min(item.TextContent.Length, 20))}...");
             }
 
             await TrimHistoryAsync();
@@ -1835,7 +1885,7 @@ namespace ClipDropPro.ViewModels
                         }
                         else if (System.Windows.Clipboard.ContainsText())
                         {
-                            string text = System.Windows.Clipboard.GetText();
+                            string text = CapTextLength(System.Windows.Clipboard.GetText());
                             if (string.IsNullOrEmpty(text)) { await Task.Delay(30); continue; }
 
                             if (text == _lastCapturedContent && (DateTime.Now - _lastCaptureTime) < _dedupeWindow)

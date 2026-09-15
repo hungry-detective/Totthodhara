@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows;
 
 namespace ClipDropPro.Services
 {
@@ -54,7 +53,6 @@ namespace ClipDropPro.Services
                     var now = DateTime.Now;
                     if ((now - _lastCtrlPressed).TotalMilliseconds < DoubleClickTime)
                     {
-                        Console.WriteLine("Double Ctrl Detected!");
                         DoubleCtrlDetected?.Invoke(this, EventArgs.Empty);
                         _lastCtrlPressed = DateTime.MinValue; // Reset
                     }

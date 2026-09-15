@@ -55,7 +55,7 @@ namespace ClipDropPro.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error setting startup: {ex.Message}");
+                Logger.Write($"Error setting startup: {ex.Message}");
             }
         }
     }

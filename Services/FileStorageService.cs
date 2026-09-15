@@ -12,6 +12,20 @@ namespace ClipDropPro.Services
     {
         private readonly string _storageFolder;
 
+        // Shared connection pool: a new HttpClient per download burns a socket
+        // per call and defeats keep-alive. One static instance reuses connections.
+        // PooledConnectionLifetime recycles connections every 2 minutes so DNS
+        // changes are picked up — this removes the only downside of a static
+        // client (stale DNS), making it strictly better than per-call clients.
+        private static readonly HttpClient _sharedHttpClient = new HttpClient(
+            new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+            })
+        {
+            Timeout = TimeSpan.FromMinutes(2)
+        };
+
         public FileStorageService()
         {
             _storageFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "Storage");
@@ -48,11 +62,28 @@ namespace ClipDropPro.Services
             var fileName = $"{Guid.NewGuid()}.png";
             var destPath = Path.Combine(_storageFolder, fileName);
 
-            using (var fileStream = new FileStream(destPath, FileMode.Create))
+            // PNG-encoding a fullscreen screenshot can take 100-500ms — keep it
+            // off the clipboard/UI thread. Freeze first so the pool thread may
+            // safely read the pixels (no-op if already frozen). On failure the
+            // partial file is deleted so no corrupt PNG ever reaches storage.
+            if (bitmap.CanFreeze && !bitmap.IsFrozen)
+                bitmap.Freeze();
+            try
             {
-                BitmapEncoder encoder = new PngBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                encoder.Save(fileStream);
+                await Task.Run(() =>
+                {
+                    using (var fileStream = new FileStream(destPath, FileMode.Create))
+                    {
+                        BitmapEncoder encoder = new PngBitmapEncoder();
+                        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                        encoder.Save(fileStream);
+                    }
+                });
+            }
+            catch
+            {
+                try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
+                throw;
             }
 
             return destPath;
@@ -60,8 +91,7 @@ namespace ClipDropPro.Services
 
         public async Task<string> DownloadImageAsync(string url)
         {
-            using var client = new HttpClient();
-            var response = await client.GetAsync(url);
+            var response = await _sharedHttpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
 
             var extension = ".png";

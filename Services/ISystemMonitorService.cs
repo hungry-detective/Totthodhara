@@ -11,6 +11,10 @@ namespace ClipDropPro.Services
         double NetworkUpKBs { get; }
         double NetworkDownKBs { get; }
         bool IsRunning { get; }
+        // Sensor gates: set from MainViewModel based on which pills are visible.
+        // Disabled sensors are skipped in OnTick so hidden widgets cost nothing.
+        bool CpuEnabled { get; set; }
+        bool NetworkEnabled { get; set; }
         event Action Updated;
         void Start();
         void Stop();

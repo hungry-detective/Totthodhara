@@ -72,9 +72,10 @@ The app icon (`app.ico`) must be a perfect square. A non-square PNG renamed to .
 - **DO NOT** remove `WS_EX_NOACTIVATE` / `WS_EX_TOOLWINDOW` — prevents focus steal
 
 ### 2. Acrylic Glass Effect (MainWindow.xaml.cs `EnableAcrylic()`)
-- **DISABLED** — `EnableAcrylic()` is a no-op. Both modes use solid colors.
+- **Brush-only frost (NOT real DWM blur)** — `EnableAcrylic()` always applies `ACCENT_DISABLED`. Real `ACRYLICBLURBEHIND` was tried and reverted 2026-09: DWM paints blur over the full rectangular HWND, filling the rounded-corner cutouts (verified in screenshots) and `SetWindowRgn` clipping does not prevent it. Frosted fills (`0xE6` shelf) over a sharp desktop look near-identical on a 32px bar with crisp corners. **DO NOT re-enable ACRYLICBLURBEHIND.**
 - `RootGrid.Background` is `Transparent` (window bg shows through).
-- All theme colors are solid, no acrylic/blur in either mode.
+- `SetAppBarPos()` clears any HWND region (`SetWindowRgn(NULL)`) — with DWM blur disabled there is nothing to contain, and a round-rect region is a 1-bit mask that staircases corners ("pixel art"). WPF anti-aliases corners natively. Do NOT re-add region clipping.
+- Rounded-corner wash-out fix (2026-09): frosted fills were deepened `0xCC`→`0xE6` so the capsule silhouette reads over blur. Do not thin them back without checking corners on wallpaper.
 
 ### 3. System Tray Icon
 - H.NotifyIcon.Wpf `TaskbarIcon`

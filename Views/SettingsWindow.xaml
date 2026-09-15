@@ -351,7 +351,7 @@
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Behavior"/>
                 <RadioButton Content="Storage" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Storage}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Storage"/>
-                <RadioButton Content="Plugins &amp; Updates" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
+                <RadioButton Content="Plugins" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Plugins"/>
                 <RadioButton Content="About" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=About}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="About"/>
@@ -880,10 +880,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- Plugins & Updates Section -->
+        <!-- Plugins Section -->
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Plugins}">
             <StackPanel>
-                <TextBlock Text="Plugins &amp; Updates" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+                <TextBlock Text="Plugins" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
 
                 <!-- Show Plugins -->
                 <Border Style="{StaticResource SettingCardStyle}">
@@ -915,6 +915,31 @@
                             <TextBlock Text="Place plugins in the Plugins folder:" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                             <TextBlock Text="Plugins\CSharp\  -  C# DLL plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="0,4,0,0"/>
                             <TextBlock Text="Plugins\JavaScript\  -  JS file plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- About Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
+            <StackPanel>
+                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock x:Name="VersionText" Text="Version 1.1.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -951,7 +976,7 @@
                     </Grid>
                 </Border>
 
-                <!-- Auto-check on startup -->
+                <!-- Auto check when app runs -->
                 <Border Style="{StaticResource SettingCardStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -961,8 +986,8 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Auto-check on startup" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Automatically check for updates when the app starts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Auto check when app runs" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically check for updates when the app runs" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
                         <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoCheckUpdates}"/>
                     </Grid>
@@ -982,30 +1007,6 @@
                             <TextBlock Text="Download and prepare updates in background without prompts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
                         </StackPanel>
                         <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding SilentAutoUpdate}"/>
-                    </Grid>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
-
-        <!-- About Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
-            <StackPanel>
-                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
-
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
-                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock x:Name="VersionText" Text="Version 1.1.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
                     </Grid>
                 </Border>
 

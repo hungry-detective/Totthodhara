@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Windows.Threading;
 
 namespace ClipDropPro.Services
@@ -23,6 +24,8 @@ namespace ClipDropPro.Services
         public double NetworkUpKBs { get; private set; }
         public double NetworkDownKBs { get; private set; }
         public bool IsRunning => _isRunning;
+        public bool CpuEnabled { get; set; } = true;
+        public bool NetworkEnabled { get; set; } = true;
 
         public event Action? Updated;
 
@@ -80,9 +83,13 @@ namespace ClipDropPro.Services
 
         private void OnTick(object? sender, EventArgs e)
         {
-            UpdateCpu();
-            UpdateMemory();
-            UpdateNetwork();
+            if (CpuEnabled)
+            {
+                UpdateCpu();
+                UpdateMemory();
+            }
+            if (NetworkEnabled)
+                UpdateNetwork();
             Updated?.Invoke();
         }
 
@@ -103,13 +110,16 @@ namespace ClipDropPro.Services
         {
             try
             {
-                using var mgmt = new System.Management.ManagementObjectSearcher("SELECT TotalVisibleMemorySize, FreePhysicalMemory FROM Win32_OperatingSystem");
-                foreach (System.Management.ManagementObject obj in mgmt.Get())
+                // GlobalMemoryStatusEx is a single cheap P/Invoke (~microseconds).
+                // The old WMI query (Win32_OperatingSystem) cost 50-200ms per tick
+                // on the UI thread — do NOT revert to it.
+                var mem = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf<MEMORYSTATUSEX>() };
+                if (GlobalMemoryStatusEx(ref mem))
                 {
-                    TotalMemoryMB = (long)(ulong)obj["TotalVisibleMemorySize"] / 1024;
-                    var freeMB = (long)(ulong)obj["FreePhysicalMemory"] / 1024;
-                    UsedMemoryMB = TotalMemoryMB - freeMB;
-                    MemoryUsage = TotalMemoryMB > 0 ? (int)(UsedMemoryMB * 100 / TotalMemoryMB) : 0;
+                    TotalMemoryMB = (long)(mem.ullTotalPhys / 1024 / 1024);
+                    long availMB = (long)(mem.ullAvailPhys / 1024 / 1024);
+                    UsedMemoryMB = TotalMemoryMB - availMB;
+                    MemoryUsage = (int)mem.dwMemoryLoad;
                 }
             }
             catch
@@ -153,6 +163,24 @@ namespace ClipDropPro.Services
                 NetworkDownKBs = 0;
             }
         }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct MEMORYSTATUSEX
+        {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
         public void Dispose()
         {

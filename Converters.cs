@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
-using Wpf.Ui.Controls;
 
 namespace ClipDropPro.Converters
 {
@@ -97,20 +96,6 @@ namespace ClipDropPro.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => System.Windows.Data.Binding.DoNothing;
     }
 
-    public class PinnedToColorConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is bool isPinned && isPinned)
-            {
-                return new SolidColorBrush(Colors.Gold);
-            }
-            return new SolidColorBrush(Colors.White);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
     public class StringToHorizontalAlignmentConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -164,42 +149,6 @@ namespace ClipDropPro.Converters
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
 
-    public class DebugStatusToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is string status && !string.IsNullOrEmpty(status) && status != "Ready")
-                return Visibility.Visible;
-            return Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
-    public class DebugStatusToBoolConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is string status && !string.IsNullOrEmpty(status) && status != "Ready")
-                return true;
-            return false;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
-    public class CountToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is int count && count > 0)
-                return Visibility.Visible;
-            return Visibility.Collapsed;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
     public class StringEqualityToBoolConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -220,15 +169,6 @@ namespace ClipDropPro.Converters
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return string.IsNullOrEmpty(value?.ToString()) ? Visibility.Collapsed : Visibility.Visible;
-        }
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
-    public class StringEmptyToVisibilityConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return string.IsNullOrEmpty(value?.ToString()) ? Visibility.Visible : Visibility.Collapsed;
         }
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
@@ -257,27 +197,5 @@ namespace ClipDropPro.Converters
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
-    public class BoolToStarConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return (value is bool b && b) ? new GridLength(0, GridUnitType.Star) : new GridLength(1, GridUnitType.Star);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
-    }
-
-    public class LeftMonitorsColumnConverter : IMultiValueConverter
-    {
-        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (values.Length >= 2 && values[0] is bool hideClipboard && values[1] is bool showLeft && hideClipboard && showLeft)
-                return 7;
-            return 0;
-        }
-
-        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture) => throw new NotImplementedException();
     }
 }

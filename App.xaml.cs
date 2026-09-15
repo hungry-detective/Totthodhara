@@ -7,7 +7,6 @@ using ClipDropPro.Views;
 using ClipDropPro.Plugins;
 using System.IO;
 using System;
-using System.Linq;
 using System.Diagnostics;
 
 namespace ClipDropPro

@@ -1,7 +1,5 @@
 using System.Windows;
 using System.Windows.Input;
-using Wpf.Ui.Appearance;
-using Wpf.Ui.Controls;
 
 namespace ClipDropPro
 {

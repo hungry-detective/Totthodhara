@@ -35,26 +35,19 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
         <conv:InvertedBooleanToVisibilityConverter x:Key="InvertedBoolToVis" />
         <conv:BooleanToHiddenConverter x:Key="BoolToHidden" />
-        <conv:BoolToStarConverter x:Key="BoolToStar" />
-        <conv:LeftMonitorsColumnConverter x:Key="LeftMonitorsColumnConverter" />
         <conv:FileToSymbolConverter x:Key="FileToSymbolConverter" />
-        <conv:DebugStatusToVisibilityConverter x:Key="DebugStatusToVisibilityConverter" />
-        <conv:DebugStatusToBoolConverter x:Key="DebugStatusToBoolConverter" />
         <!-- SearchToggleButton visibility managed in code-behind via UpdateSearchButtonVisibilityForStatus() -->
-        <conv:CountToVisibilityConverter x:Key="CountToVisibilityConverter" />
-        <conv:PinnedToColorConverter x:Key="PinnedToColorConverter" />
         <conv:PinnedToMenuItemConverter x:Key="PinnedToMenuItemConverter" />
         <conv:SnippetToMenuItemConverter x:Key="SnippetToMenuItemConverter" />
         <conv:StringToHorizontalAlignmentConverter x:Key="StringToAddConverter" />
         <conv:HexToColorConverter x:Key="HexToColorConverter" />
         <conv:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVisibilityConverter" />
-        <conv:StringEmptyToVisibilityConverter x:Key="StringEmptyToVisibilityConverter" />
 
         <!-- Content DataTemplates for ItemContentSelector -->
         <DataTemplate x:Key="ImageContentTemplate">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Image Source="{Binding ThumbnailSource}" Width="{DynamicResource ImageThumbWidth}" Height="{DynamicResource ImageThumbHeight}" Stretch="UniformToFill"
-                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                       RenderOptions.BitmapScalingMode="Linear"/>
                 <TextBlock Text="{Binding ResolutionText}" FontSize="{DynamicResource ImageResFontSize}" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextColor}" TextDecorations="None"
                            VerticalAlignment="Center" Margin="4,0,0,0"/>
@@ -324,13 +317,14 @@
                     <Border.OpacityMask>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                             <GradientStop Color="Transparent" Offset="0.0" />
-                            <GradientStop Color="Black" Offset="0.02" /> 
-                            <GradientStop Color="Black" Offset="0.98" />
+                            <GradientStop Color="Black" Offset="0.03" /> 
+                            <GradientStop Color="Black" Offset="0.97" />
                             <GradientStop Color="Transparent" Offset="1.0" />
                         </LinearGradientBrush>
                     </Border.OpacityMask>
                     <ScrollViewer x:Name="ShelfScrollViewer"
                               Background="Transparent"
+                              Padding="4,0,4,0"
                               HorizontalScrollBarVisibility="Hidden" 
                               VerticalScrollBarVisibility="Disabled"
                               PanningMode="HorizontalOnly"
@@ -354,7 +348,9 @@
                                     Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <Border.Style>
                                     <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{DynamicResource CardItemBg}"/>
+                                        <!-- No fill: card is border-outline only, shelf shows through.
+                                             Hover/selection/highlight setters below still apply. -->
+                                        <Setter Property="Background" Value="Transparent"/>
                                         <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
                                         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
                                         <Setter Property="RenderTransform">
@@ -442,14 +438,14 @@
                                          <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderThickness="0" Padding="5" Placement="Top" VerticalOffset="-8">
                                             <StackPanel MaxWidth="300">
                                                 <!-- Image ToolTip -->
-                                                <Image Source="{Binding ThumbnailSource}" MaxHeight="200" Stretch="Uniform" 
-                                                       RenderOptions.BitmapScalingMode="HighQuality"
-                                                       Visibility="{Binding IsImage, Converter={StaticResource BoolToVis}}"/>
+                                                 <Image Source="{Binding ThumbnailSource}" MaxHeight="200" Stretch="Uniform" 
+                                                        RenderOptions.BitmapScalingMode="Linear"
+                                                        Visibility="{Binding IsImage, Converter={StaticResource BoolToVis}}"/>
                                                 
                                                 <!-- Video ToolTip with Play Overlay -->
                                                 <Grid Visibility="{Binding IsVideo, Converter={StaticResource BoolToVis}}" MaxHeight="200">
                                                     <Image Source="{Binding ThumbnailSource}" Stretch="Uniform" 
-                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                           RenderOptions.BitmapScalingMode="Linear"/>
                                                     <Path Data="M 0,0 L 20,10 L 0,20 Z" Fill="#CCFFFFFF" Stretch="Uniform" Width="32" Height="32" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                 </Grid>
 
@@ -699,11 +695,11 @@
                             </Style.Triggers>
                         </Style>
                     </ToggleButton.Style>
-                    <ui:SymbolIcon Symbol="Copy24" 
-                                   FontSize="{DynamicResource ToolBarIconSize}"
-                                   HorizontalAlignment="Center" 
-                                   VerticalAlignment="Center" 
-                                   Foreground="{DynamicResource IconColor}"/>
+                    <ui:SymbolIcon Symbol="Clipboard24" 
+                                    FontSize="{DynamicResource ToolBarIconSize}"
+                                    HorizontalAlignment="Center" 
+                                    VerticalAlignment="Center" 
+                                    Foreground="{DynamicResource IconColor}"/>
                 </ToggleButton>
 
                 <!-- Paste All Button (visible when items selected for multi-paste) -->
@@ -931,7 +927,7 @@
                              <MenuItem IsEnabled="False" FontWeight="SemiBold" Height="48">
                                 <MenuItem.Icon>
                                     <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
+                                        <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="Linear" Stretch="Uniform"/>
                                     </Border>
                                 </MenuItem.Icon>
                                 <MenuItem.Header>
