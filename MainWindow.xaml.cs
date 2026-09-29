@@ -92,7 +92,6 @@ namespace ClipDropPro
             {
                 _viewModel.SettingsViewModel.PropertyChanged += ViewModel_SettingsPropertyChanged;
             }
-            _viewModel.EverythingSearchRequested += OpenEverythingSearchFromHotkey;
             
             // Initial theme application
             UpdateTheme();
@@ -227,20 +226,6 @@ namespace ClipDropPro
             } catch { return new System.Drawing.Bitmap(source); }
         }
 
-        private void UpdatePluginBorderVisibility()
-        {
-            try
-            {
-                if (PluginBorder == null || PluginContainer == null) return;
-                bool show = (_viewModel?.SettingsViewModel?.ShowPlugins == true)
-                    && PluginContainer.Children.Count > 0;
-                PluginBorder.Visibility = show
-                    ? System.Windows.Visibility.Visible
-                    : System.Windows.Visibility.Collapsed;
-            }
-            catch { }
-        }
-
         private void ViewModel_SettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
             switch (e.PropertyName)
@@ -269,9 +254,6 @@ namespace ClipDropPro
                     break;
                 case nameof(SettingsViewModel.RoundedCorners):
                     SetAppBarPos();
-                    break;
-                case nameof(SettingsViewModel.ShowPlugins):
-                    UpdatePluginBorderVisibility();
                     break;
             }
         }
@@ -392,8 +374,6 @@ namespace ClipDropPro
                     Services.OsThemeHelper.ApplyWindowTheme(_deleteBubble, isLightTheme);
                 if (_dragPopup != null)
                     Services.OsThemeHelper.ApplyWindowTheme(_dragPopup, isLightTheme);
-                if (_everythingWindow != null)
-                    Services.OsThemeHelper.ApplyWindowTheme(_everythingWindow, isLightTheme);
             }
             catch { }
         }
@@ -883,17 +863,7 @@ namespace ClipDropPro
         private System.Windows.Controls.Border _searchBoxBorder;
         private System.Windows.Controls.TextBox _searchTextBox;
 
-        // Everything launcher results (shelf search → file results popup)
-        private System.Windows.Window _everythingWindow;
-        private System.Windows.Controls.StackPanel _everythingRows;
-        private System.Windows.Controls.ScrollViewer _everythingScroll;
-        private System.Windows.Threading.DispatcherTimer _everythingDebounce;
         private System.Windows.Threading.DispatcherTimer _searchFocusGrace;
-        private System.Threading.CancellationTokenSource _everythingCts;
-        private System.Collections.Generic.List<Services.EverythingService.FileHit> _everythingHits = new();
-        private int _everythingSelected = -1;
-        private static readonly System.Collections.Generic.Dictionary<string, System.Windows.Media.ImageSource> _everythingIconCache =
-            new(System.StringComparer.OrdinalIgnoreCase);
 
         public void ContextMenu_Opened(object sender, RoutedEventArgs e)
         {
@@ -1200,21 +1170,6 @@ namespace ClipDropPro
                 }
             };
 
-            // Typing the trigger word while the shelf has focus summons file
-            // search directly (same as right-clicking the search icon).
-            this.PreviewTextInput += (s, te) =>
-            {
-                if (_searchBoxBorder != null) return;
-                string trigger = _viewModel?.SettingsViewModel?.EverythingTrigger;
-                if (string.IsNullOrEmpty(trigger)) return;
-                if (_viewModel?.SettingsViewModel?.ShowEverythingResults != true) return;
-                if (te.Text == trigger)
-                {
-                    OpenEverythingSearchFromHotkey();
-                    te.Handled = true;
-                }
-            };
-
             // Apply HideClipboard layout on startup if enabled
             UpdateLayoutForHideClipboard();
 
@@ -1224,35 +1179,9 @@ namespace ClipDropPro
 
         private async void LoadPlugins()
         {
-            try
-            {
-                var pluginManager = App.GetService<PluginManager>();
-                if (pluginManager == null) return;
-
-                var settingsService = App.GetService<Services.ISettingsService>();
-                if (settingsService == null) return;
-
-                var settings = new PluginsSettings { ShowPlugins = settingsService.ShowPlugins };
-                await pluginManager.LoadPluginsAsync(settings);
-
-                // Add plugin views to the PluginContainer
-                if (PluginContainer != null)
-                {
-                    PluginContainer.Children.Clear();
-                    var views = pluginManager.GetAllViews();
-                    foreach (var view in views)
-                    {
-                        PluginContainer.Children.Add(view);
-                    }
-                }
-                // No plugins = no sliver: collapse the container border so it
-                // can't render even a hairline between gear and monitors.
-                UpdatePluginBorderVisibility();
-            }
-            catch (Exception ex)
-            {
-                Services.Logger.Write($"[MainWindow] Failed to load plugins: {ex.Message}");
-            }
+            // Plugins are unused — the shelf shows no plugin widgets and the
+            // settings page has no plugin options. Skip loading entirely.
+            await System.Threading.Tasks.Task.CompletedTask;
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -1297,15 +1226,12 @@ namespace ClipDropPro
             }
             if (_viewModel.HideClipboard)
             {
-                SearchToggleButton.Visibility = System.Windows.Visibility.Collapsed;
                 if (StatusToastPopup != null) StatusToastPopup.IsOpen = false;
                 return;
             }
             if (_searchBoxBorder != null) return;
             var status = _viewModel.DebugStatus;
             bool active = !string.IsNullOrEmpty(status) && status != "Ready";
-            // Search button stays visible always
-            SearchToggleButton.Visibility = System.Windows.Visibility.Visible;
 
             // Show/hide status toast popup with animation
                 // Toast disabled to prevent visual flash/movement on click
@@ -2733,21 +2659,9 @@ namespace ClipDropPro
 
         #region Search, MultiPaste
 
-        // Search mode: false = clipboard filter only (left-click),
-        // true = clipboard filter + Everything files (right-click).
-        private bool _searchEverythingMode = false;
-
         private void SearchToggleButton_Click(object sender, RoutedEventArgs e)
         {
-            _searchEverythingMode = false;
             OpenSearchBox();
-        }
-
-        private void SearchButton_RightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            _searchEverythingMode = true;
-            OpenSearchBox();
-            e.Handled = true;
         }
 
         private void OpenSearchBox()
@@ -2905,38 +2819,10 @@ namespace ClipDropPro
             return menu;
         }
 
-        private void OpenEverythingSearchFromHotkey()
-        {
-            if (!Dispatcher.CheckAccess())
-            {
-                Dispatcher.BeginInvoke(new Action(OpenEverythingSearchFromHotkey));
-                return;
-            }
-            try
-            {
-                if (_viewModel?.SettingsViewModel?.ShowEverythingResults != true) return;
-                _viewModel.IsShelfVisible = true;
-                _searchEverythingMode = true;
-                if (_searchBoxBorder == null)
-                {
-                    OpenSearchBox();
-                }
-                else if (_searchTextBox != null)
-                {
-                    _searchTextBox.Focus();
-                    System.Windows.Input.Keyboard.Focus(_searchTextBox);
-                    ScheduleEverythingSearch();
-                }
-            }
-            catch { }
-        }
-
         private void CloseSearch()
         {
             _viewModel.SearchText = string.Empty;
-            _searchEverythingMode = false;
             try { _searchFocusGrace?.Stop(); } catch { }
-            CloseEverythingResults();
             if (_searchBoxBorder != null)
             {
                 var parentGrid = _searchBoxBorder.Parent as System.Windows.Controls.Grid;
@@ -2945,36 +2831,16 @@ namespace ClipDropPro
                 _searchTextBox = null;
                 EnableNoActivate();
             }
-            SearchToggleButton.Visibility = System.Windows.Visibility.Visible;
             UpdateSearchButtonVisibilityForStatus();
         }
 
         private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
         {
-            string raw = (_searchTextBox ?? sender as System.Windows.Controls.TextBox)?.Text ?? string.Empty;
-            // Trigger word (e.g. ";notes"): the shelf filters by the stripped
-            // name while Everything searches it. Plain text filters as-is.
-            string stripped = StripEverythingTrigger(raw);
-            _viewModel.SearchText = stripped ?? raw;
-            ScheduleEverythingSearch();
+            _viewModel.SearchText = (_searchTextBox ?? sender as System.Windows.Controls.TextBox)?.Text ?? string.Empty;
         }
 
         private void SearchBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            // Launcher navigation while file results are showing
-            if (_everythingWindow != null && _everythingHits.Count > 0)
-            {
-                if (e.Key == System.Windows.Input.Key.Down) { MoveEverythingSelection(1); e.Handled = true; return; }
-                if (e.Key == System.Windows.Input.Key.Up) { MoveEverythingSelection(-1); e.Handled = true; return; }
-                if (e.Key == System.Windows.Input.Key.Enter)
-                {
-                    bool reveal = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
-                    int idx = _everythingSelected >= 0 ? _everythingSelected : 0;
-                    OpenEverythingHit(_everythingHits[idx], reveal);
-                    e.Handled = true;
-                    return;
-                }
-            }
             if (e.Key == System.Windows.Input.Key.Escape || e.Key == System.Windows.Input.Key.Enter)
             {
                 CloseSearch();
@@ -3007,556 +2873,6 @@ namespace ClipDropPro
             _searchFocusGrace.Start();
         }
 
-        #region Everything launcher search
-        /// <summary>
-        /// Effective Everything query, or null when file search is inactive.
-        /// Active when: right-click mode is on, OR the text starts with the
-        /// user's trigger word (both also need the Plugins toggle enabled).
-        /// </summary>
-        private string GetActiveEverythingQuery()
-        {
-            try
-            {
-                if (_searchBoxBorder == null) return null;
-                if (_viewModel?.SettingsViewModel?.ShowEverythingResults != true) return null;
-                string raw = _searchTextBox?.Text ?? string.Empty;
-                string q = _searchEverythingMode ? raw : StripEverythingTrigger(raw);
-                if (string.IsNullOrWhiteSpace(q)) return null;
-                q = q.Trim();
-                return q.Length >= 2 ? q : null;
-            }
-            catch { return null; }
-        }
-
-        private string StripEverythingTrigger(string raw)
-        {
-            try
-            {
-                string trigger = _viewModel?.SettingsViewModel?.EverythingTrigger;
-                if (string.IsNullOrEmpty(trigger)) return null;
-                if ((raw ?? string.Empty).StartsWith(trigger, System.StringComparison.Ordinal))
-                    return raw.Substring(trigger.Length);
-            }
-            catch { }
-            return null;
-        }
-
-        private void ScheduleEverythingSearch()
-        {
-            try
-            {
-                if (GetActiveEverythingQuery() == null)
-                {
-                    CloseEverythingResults();
-                    return;
-                }
-                if (_everythingDebounce == null)
-                {
-                    _everythingDebounce = new System.Windows.Threading.DispatcherTimer
-                    {
-                        Interval = TimeSpan.FromMilliseconds(250)
-                    };
-                    _everythingDebounce.Tick += async (s, e) =>
-                    {
-                        _everythingDebounce.Stop();
-                        await RunEverythingQueryAsync();
-                    };
-                }
-                _everythingDebounce.Stop();
-                _everythingDebounce.Start();
-            }
-            catch { }
-        }
-
-        /// <summary>
-        /// Work area of the monitor the shelf is actually on (DIPs).
-        /// SystemParameters.WorkArea is primary-monitor-only — using it puts
-        /// the popup half off-screen on multi-monitor setups.
-        /// </summary>
-        private System.Windows.Rect GetShelfMonitorWorkArea(double dpi)
-        {
-            try
-            {
-                IntPtr hwnd = new WindowInteropHelper(this).Handle;
-                IntPtr mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-                MONITORINFO mi = new MONITORINFO();
-                mi.cbSize = Marshal.SizeOf(mi);
-                if (dpi <= 0) dpi = 1.0;
-                if (GetMonitorInfo(mon, ref mi))
-                {
-                    return new System.Windows.Rect(
-                        mi.rcWork.left / dpi, mi.rcWork.top / dpi,
-                        (mi.rcWork.right - mi.rcWork.left) / dpi,
-                        (mi.rcWork.bottom - mi.rcWork.top) / dpi);
-                }
-            }
-            catch { }
-            return System.Windows.SystemParameters.WorkArea;
-        }
-
-        private async System.Threading.Tasks.Task RunEverythingQueryAsync()
-        {
-            string text = null;
-            try
-            {
-                text = GetActiveEverythingQuery();
-                if (text == null) { CloseEverythingResults(); return; }
-                _everythingCts?.Cancel();
-                _everythingCts = new System.Threading.CancellationTokenSource();
-                var ct = _everythingCts.Token;
-                var hits = await Services.EverythingService.SearchAsync(text, 64, ct);
-                if (ct.IsCancellationRequested) return;
-                // Drop stale results if the user kept typing (compare effective
-                // queries, not raw box text — trigger prefix is stripped).
-                if (!string.Equals(GetActiveEverythingQuery(), text, System.StringComparison.Ordinal)) return;
-                if (_searchBoxBorder == null) return;
-                _everythingHits = hits;
-                _everythingSelected = hits.Count > 0 ? 0 : -1;
-                if (hits.Count == 0) CloseEverythingResults();
-                else ShowEverythingResults();
-            }
-            catch { }
-        }
-
-        private void ShowEverythingResults()
-        {
-            try
-            {
-                if (_everythingHits.Count == 0) return;
-                if (_everythingWindow == null)
-                {
-                    var border = new System.Windows.Controls.Border
-                    {
-                        CornerRadius = new System.Windows.CornerRadius(10),
-                        BorderThickness = new System.Windows.Thickness(1),
-                        Padding = new System.Windows.Thickness(6),
-                        MinWidth = 380, MaxWidth = 388
-                    };
-                    border.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "WindowBg");
-                    border.SetResourceReference(System.Windows.Controls.Border.BorderBrushProperty, "BorderColor");
-
-                    var stack = new System.Windows.Controls.StackPanel();
-                    var header = new System.Windows.Controls.TextBlock
-                    {
-                        Text = "Files on this PC  (Enter open · Ctrl+Enter reveal)",
-                        FontSize = 10, Opacity = 0.6,
-                        Margin = new System.Windows.Thickness(8, 2, 8, 6)
-                    };
-                    header.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextColor");
-                    stack.Children.Add(header);
-
-                    var scroll = new System.Windows.Controls.ScrollViewer
-                    {
-                        VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
-                        MaxHeight = 340, Content = new System.Windows.Controls.StackPanel()
-                    };
-                    _everythingScroll = scroll;
-                    _everythingRows = (System.Windows.Controls.StackPanel)scroll.Content;
-                    stack.Children.Add(scroll);
-                    border.Child = stack;
-
-                    _everythingWindow = new System.Windows.Window
-                    {
-                        WindowStyle = System.Windows.WindowStyle.None,
-                        AllowsTransparency = true,
-                        Background = null,
-                        Topmost = true,
-                        Width = 400,
-                        MinWidth = 400,
-                        MaxWidth = 400,
-                        // Manual: explicit Height is authoritative. SizeToContent
-                        // would IGNORE Height and grow to all 30 rows (~1300px),
-                        // covering shelf + taskbar with the bottom cut off.
-                        SizeToContent = System.Windows.SizeToContent.Manual,
-                        ShowInTaskbar = false,
-                        ShowActivated = false,
-                        ResizeMode = System.Windows.ResizeMode.NoResize,
-                        Content = border
-                    };
-                    _everythingWindow.SourceInitialized += (s, e) =>
-                    {
-                        try
-                        {
-                            var hwnd = new WindowInteropHelper(_everythingWindow).Handle;
-                            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-                            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
-                            Services.OsThemeHelper.ApplyWindowTheme(_everythingWindow,
-                                Services.OsThemeHelper.CurrentResourcesAreLight());
-                        }
-                        catch { }
-                    };
-                }
-
-                _everythingRows.Children.Clear();
-                for (int i = 0; i < _everythingHits.Count; i++)
-                    _everythingRows.Children.Add(BuildEverythingRow(_everythingHits[i], i));
-                RefreshEverythingSelection();
-
-                // Anchor above the search box (below it when shelf is on top).
-                // NOTE: never use this.Top/Left — WPF Left/Top are NOT set after
-                // SetWindowPos (AppBar quirk), so read the true HWND rect.
-                // All math in DIPs: PointToScreen AND GetWindowRect are physical
-                // pixels, WorkArea/Top are DIPs — convert once via dpiFactor.
-                // The window is hard-capped to the space above the shelf so it
-                // can NEVER cover the shelf or the taskbar; overflow scrolls.
-                double dpi = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformToDevice.M22 ?? 1.0;
-                RECT shelfRect;
-                bool gotRect = GetWindowRect(new WindowInteropHelper(this).Handle, out shelfRect);
-                double shelfTop = gotRect ? shelfRect.top / dpi : this.Top;
-                double shelfBottom = gotRect ? shelfRect.bottom / dpi : (this.Top + this.Height);
-                // Shelf's OWN monitor work area (not the primary screen's) —
-                // wrong monitor = popup half off-screen on multi-monitor setups.
-                var area = GetShelfMonitorWorkArea(dpi);
-                // Docked to the shelf's right edge (above the search side),
-                // never floating centered over the middle. 2px clear of the
-                // screen edge — nearly touching, with room to spare.
-                _everythingWindow.Left = Math.Max(area.Left + 4, area.Right - 402);
-                bool shelfOnTop = _viewModel?.ShelfPosition == "Top";
-                double maxH = shelfOnTop
-                    ? Math.Max(220, Math.Min(420, area.Bottom - shelfBottom - 12))
-                    : Math.Max(220, Math.Min(420, shelfTop - area.Top - 12));
-                _everythingWindow.Height = Math.Min(48 + _everythingHits.Count * 56, maxH);
-                if (_everythingScroll != null)
-                    _everythingScroll.MaxHeight = Math.Max(120, _everythingWindow.Height - 68);
-                _everythingWindow.Top = shelfOnTop
-                    ? shelfBottom + 6
-                    : shelfTop - _everythingWindow.Height - 6;
-                Services.Logger.Write($"[Wnd] Everything popup: L={_everythingWindow.Left:F0} T={_everythingWindow.Top:F0} " +
-                    $"W={_everythingWindow.Width:F0} H={_everythingWindow.Height:F0} rows={_everythingHits.Count} " +
-                    $"shelfTop={shelfTop:F0} dpi={dpi:F2}");
-
-                if (!_everythingWindow.IsVisible)
-                    _everythingWindow.Show();
-                // Rendered ground truth (DIPs): what the compositor really did.
-                try
-                {
-                    RECT rendered;
-                    if (GetWindowRect(new WindowInteropHelper(_everythingWindow).Handle, out rendered))
-                    {
-                        Services.Logger.Write($"[Wnd] Everything rendered: L={rendered.left / dpi:F0} T={rendered.top / dpi:F0} " +
-                            $"R={rendered.right / dpi:F0} B={rendered.bottom / dpi:F0}");
-                    }
-                }
-                catch { }
-            }
-            catch { }
-        }
-
-        private System.Windows.Controls.Border BuildEverythingRow(
-            Services.EverythingService.FileHit hit, int index)
-        {
-            var row = new System.Windows.Controls.Border
-            {
-                CornerRadius = new System.Windows.CornerRadius(6),
-                Padding = new System.Windows.Thickness(6, 4, 6, 4),
-                Background = System.Windows.Media.Brushes.Transparent,
-                Cursor = System.Windows.Input.Cursors.Hand,
-                Tag = index
-            };
-            var grid = new System.Windows.Controls.Grid();
-            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(28) });
-            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var iconHost = new System.Windows.Controls.Grid
-            {
-                Width = 28,
-                VerticalAlignment = System.Windows.VerticalAlignment.Center
-            };
-            if (hit.IsFolder)
-            {
-                // Folders always get a real folder glyph (never blank).
-                var folderIcon = new Wpf.Ui.Controls.SymbolIcon
-                {
-                    Symbol = Wpf.Ui.Controls.SymbolRegular.Folder24,
-                    FontSize = 20,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center
-                };
-                folderIcon.SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, "IconColor");
-                iconHost.Children.Add(folderIcon);
-            }
-            else
-            {
-                var src = GetEverythingIcon(hit);
-                if (src != null)
-                {
-                    iconHost.Children.Add(new System.Windows.Controls.Image
-                    {
-                        Width = 20, Height = 20,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                        Source = src
-                    });
-                }
-                else
-                {
-                    // Fallback generic file glyph (never blank).
-                    var fileIcon = new Wpf.Ui.Controls.SymbolIcon
-                    {
-                        Symbol = Wpf.Ui.Controls.SymbolRegular.Document24,
-                        FontSize = 20,
-                        HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                        VerticalAlignment = System.Windows.VerticalAlignment.Center
-                    };
-                    fileIcon.SetResourceReference(System.Windows.Controls.Control.ForegroundProperty, "IconColor");
-                    iconHost.Children.Add(fileIcon);
-                }
-            }
-            grid.Children.Add(iconHost);
-
-            var texts = new System.Windows.Controls.StackPanel { VerticalAlignment = System.Windows.VerticalAlignment.Center };
-            var name = new System.Windows.Controls.TextBlock
-            {
-                Text = string.IsNullOrEmpty(hit.Name) ? hit.FullPath : hit.Name,
-                FontSize = 13, FontWeight = System.Windows.FontWeights.SemiBold,
-                TextTrimming = System.Windows.TextTrimming.CharacterEllipsis
-            };
-            name.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextColor");
-            var path = new System.Windows.Controls.TextBlock
-            {
-                Text = hit.FullPath, FontSize = 10, Opacity = 0.6,
-                TextWrapping = System.Windows.TextWrapping.Wrap,
-                MaxHeight = 28, // max 2 lines — full path stays readable, never clipped away
-                TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
-                ToolTip = hit.FullPath
-            };
-            path.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "TextColor");
-            texts.Children.Add(name);
-            texts.Children.Add(path);
-            System.Windows.Controls.Grid.SetColumn(texts, 1);
-            grid.Children.Add(texts);
-            row.Child = grid;
-
-            row.MouseEnter += (s, e) =>
-            {
-                _everythingSelected = (int)((System.Windows.Controls.Border)s).Tag;
-                RefreshEverythingSelection();
-            };
-            row.PreviewMouseLeftButtonUp += (s, e) =>
-            {
-                int idx = (int)((System.Windows.Controls.Border)s).Tag;
-                if (idx >= 0 && idx < _everythingHits.Count)
-                    OpenEverythingHit(_everythingHits[idx], false);
-            };
-            row.ContextMenu = BuildEverythingContextMenu(hit);
-            return row;
-        }
-
-        private System.Windows.Controls.ContextMenu BuildEverythingContextMenu(
-            Services.EverythingService.FileHit hit)
-        {
-            // Fresh resources on every show (theme-live). Separate visual tree,
-            // so snapshot brushes here instead of DynamicResource.
-            var app = System.Windows.Application.Current;
-            var menuBg = app?.Resources["MenuBg"] as System.Windows.Media.Brush
-                ?? System.Windows.Media.Brushes.White;
-            var textBrush = app?.Resources["TextColor"] as System.Windows.Media.Brush
-                ?? System.Windows.Media.Brushes.Black;
-            var menu = new System.Windows.Controls.ContextMenu
-            {
-                Background = menuBg,
-                Foreground = textBrush,
-                BorderThickness = new System.Windows.Thickness(0)
-            };
-            System.Windows.Controls.MenuItem Make(string header, string glyph, System.Action action)
-            {
-                var mi = new System.Windows.Controls.MenuItem { Header = header };
-                mi.Icon = new System.Windows.Controls.TextBlock
-                {
-                    Text = glyph,
-                    FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
-                    FontSize = 13, Width = 24, TextAlignment = System.Windows.TextAlignment.Center,
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                    Foreground = textBrush
-                };
-                mi.Click += (s, e) => action();
-                return mi;
-            }
-            menu.Items.Add(Make("Open", "\uE8B7", () => OpenEverythingHit(hit, false)));
-            menu.Items.Add(Make("Open containing folder", "\uE8B7", () => RevealEverythingHit(hit, true)));
-            menu.Items.Add(Make("Copy file", "\uE8C8", () => CopyEverythingFile(hit)));
-            menu.Items.Add(Make("Copy as path", "\uE71B", () => CopyEverythingPath(hit)));
-            return menu;
-        }
-
-        private void RevealEverythingHit(Services.EverythingService.FileHit hit, bool openFolderDirectly)
-        {
-            try
-            {
-                if (hit == null || string.IsNullOrEmpty(hit.FullPath)) return;
-                if (hit.IsFolder && openFolderDirectly)
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = hit.FullPath, UseShellExecute = true
-                    });
-                }
-                else
-                {
-                    // /select works for both files and folders
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "explorer.exe",
-                        Arguments = "/select,\"" + hit.FullPath + "\"",
-                        UseShellExecute = true
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Services.Logger.Write($"[Wnd] RevealEverythingHit failed: {ex.Message}");
-            }
-            CloseSearch();
-        }
-
-        private void CopyEverythingFile(Services.EverythingService.FileHit hit)
-        {
-            try
-            {
-                if (hit == null || string.IsNullOrEmpty(hit.FullPath)) return;
-                if (hit.IsFolder)
-                {
-                    // Folders copy as path text (a FileDropList to a folder also pastes it — keep simple: path text)
-                    System.Windows.Clipboard.SetText(hit.FullPath);
-                }
-                else
-                {
-                    var files = new System.Collections.Specialized.StringCollection { hit.FullPath };
-                    System.Windows.Clipboard.SetFileDropList(files);
-                }
-            }
-            catch (Exception ex)
-            {
-                Services.Logger.Write($"[Wnd] CopyEverythingFile failed: {ex.Message}");
-            }
-            CloseSearch();
-        }
-
-        private void CopyEverythingPath(Services.EverythingService.FileHit hit)
-        {
-            try
-            {
-                if (hit == null || string.IsNullOrEmpty(hit.FullPath)) return;
-                System.Windows.Clipboard.SetText(hit.FullPath);
-            }
-            catch (Exception ex)
-            {
-                Services.Logger.Write($"[Wnd] CopyEverythingPath failed: {ex.Message}");
-            }
-            CloseSearch();
-        }
-
-        private void MoveEverythingSelection(int delta)
-        {
-            if (_everythingHits.Count == 0) return;
-            _everythingSelected = (_everythingSelected + delta + _everythingHits.Count) % _everythingHits.Count;
-            RefreshEverythingSelection();
-        }
-
-        private void RefreshEverythingSelection()
-        {
-            if (_everythingRows == null) return;
-            for (int i = 0; i < _everythingRows.Children.Count; i++)
-            {
-                if (_everythingRows.Children[i] is System.Windows.Controls.Border row)
-                {
-                    if (i == _everythingSelected)
-                    {
-                        row.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "AccentColorDim");
-                        try { row.BringIntoView(); } catch { }
-                    }
-                    else
-                        row.Background = System.Windows.Media.Brushes.Transparent;
-                }
-            }
-        }
-
-        private void OpenEverythingHit(Services.EverythingService.FileHit hit, bool revealInExplorer)
-        {
-            try
-            {
-                if (hit == null || string.IsNullOrEmpty(hit.FullPath)) return;
-                if (hit.IsFolder && !revealInExplorer)
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = hit.FullPath, UseShellExecute = true
-                    });
-                }
-                else if (revealInExplorer)
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "explorer.exe",
-                        Arguments = "/select,\"" + hit.FullPath + "\"",
-                        UseShellExecute = true
-                    });
-                }
-                else
-                {
-                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = hit.FullPath, UseShellExecute = true
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Services.Logger.Write($"[Wnd] OpenEverythingHit failed: {ex.Message}");
-            }
-            CloseSearch();
-        }
-
-        private void CloseEverythingResults()
-        {
-            try { _everythingDebounce?.Stop(); } catch { }
-            try { _everythingCts?.Cancel(); } catch { }
-            _everythingHits.Clear();
-            _everythingSelected = -1;
-            if (_everythingWindow != null)
-            {
-                try { _everythingWindow.Close(); } catch { }
-                _everythingWindow = null;
-                _everythingRows = null;
-                _everythingScroll = null;
-            }
-        }
-
-        private System.Windows.Media.ImageSource GetEverythingIcon(Services.EverythingService.FileHit hit)
-        {
-            try
-            {
-                string key = hit.IsFolder ? "<DIR>" :
-                    (System.IO.Path.GetExtension(hit.FullPath) ?? "").ToLowerInvariant();
-                if (string.IsNullOrEmpty(key)) key = "<FILE>";
-                lock (_everythingIconCache)
-                {
-                    if (_everythingIconCache.TryGetValue(key, out var cached)) return cached;
-                }
-                System.Drawing.Icon ico = null;
-                try { ico = System.Drawing.Icon.ExtractAssociatedIcon(hit.FullPath); } catch { }
-                System.Windows.Media.ImageSource src = null;
-                if (ico != null)
-                {
-                    using (ico)
-                    {
-                        src = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
-                            ico.Handle,
-                            System.Windows.Int32Rect.Empty,
-                            System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
-                        src.Freeze();
-                    }
-                }
-                lock (_everythingIconCache)
-                {
-                    if (_everythingIconCache.Count < 200)
-                        _everythingIconCache[key] = src;
-                }
-                return src;
-            }
-            catch { return null; }
-        }
-        #endregion
 
         private async void PasteAllButton_Click(object sender, RoutedEventArgs e)
         {

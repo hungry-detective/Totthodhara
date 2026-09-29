@@ -14,11 +14,10 @@ Totthodhara is a modern, high-performance clipboard manager designed with a floa
 - **Drag & Drop**: Drag items from the shelf directly into other applications (text editors, file explorers, image editors) to paste the content.
 - **Drag Protection**: Dragging an item back onto the shelf does not create duplicates.
 - **Shelf-to-Shelf Reordering**: Ctrl+drag items to reorder or remove them from the shelf with visual feedback.
-- **Quick Search (Ctrl+F)**: Press the search button or Ctrl+F to open a search popup. Type to filter items instantly by text content, file name, or display title.
-- **Everything File Search**: With voidtools Everything running, shelf search also shows instant file/folder results in a launcher popup — Enter opens, Ctrl+Enter reveals in Explorer, Up/Down navigates. Toggle in Settings > Behavior.
+- **Quick Search (Ctrl+F)**: Press Ctrl+F to open a search box. Type to filter items instantly by text content, file name, or display title.
 - **Pin to Top**: Pin important items to keep them at the top of the shelf, visually separated. Pinned items always appear before unpinned history.
 - **History Size Limit**: Configurable maximum number of items (Settings > Max History Items). Oldest unpinned items are automatically trimmed when the limit is exceeded.
-- **Multi-Paste Mode**: Toggle multi-paste mode (📋 button) to queue multiple items by clicking. Press "Paste All" to paste them all in sequence with one click.
+- **Multi-Paste**: hold Shift and click items to select them, then press "Paste All" to paste in sequence.
 - **Snippets**: Save frequently used text as permanent snippet items. Snippets have a ⭐ indicator and are never deleted by Clear History or auto-clean.
 - **Smart Fullscreen Detection**: Automatically hides when watching videos or using fullscreen apps. Stays hidden during seeking/playback. Reappears when you switch away.
 - **Original File Names**: Dragging or pasting files preserves their original names — no more GUID filenames in your emails or folders.

@@ -209,7 +209,7 @@
                                     <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.1,11 L6,16 L11.9,11"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
+                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="4,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- Network Upload Left -->
@@ -224,7 +224,7 @@
                                     <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.1,7 L6,2 L11.9,7"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
+                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="4,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- CPU Left -->
@@ -626,15 +626,15 @@
                     </Border>
                 </Popup>
 
-                <!-- Search Toggle Button / Inline Search Box (left-click: clipboard, right-click: Everything files) -->
+                <!-- Search Toggle Button / Inline Search Box (button itself stays
+                     hidden — opened via Ctrl+F or Ctrl+;) -->
                 <Button Grid.Column="4" x:Name="SearchToggleButton"
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
                         Margin="1,0,3,0" VerticalAlignment="Center"
                         Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                         Click="SearchToggleButton_Click"
-                        PreviewMouseRightButtonUp="SearchButton_RightClick"
-                        FocusVisualStyle="{x:Null}"
-                        Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
+                        Visibility="Collapsed"
+                        FocusVisualStyle="{x:Null}">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
@@ -668,13 +668,14 @@
                 <!-- MultiPaste Toggle Button (same template shape as the other
                      toolbar buttons: padded Border + direct glyph. A bare
                      ContentPresenter rendered a dark square here.) -->
+                <!-- MultiPaste Toggle Button (permanently hidden — Shift+click selects instead) -->
                 <ToggleButton Grid.Column="5" x:Name="MultiPasteToggleButton"
                               Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
                               Margin="1,0,7,0" VerticalAlignment="Center"
                               Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                               FocusVisualStyle="{x:Null}"
                               IsChecked="{Binding IsMultiPasteMode}"
-                              Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
+                              Visibility="Collapsed">
                     <ToggleButton.Style>
                         <Style TargetType="ToggleButton">
                             <Setter Property="Template">
@@ -717,8 +718,11 @@
                 </ToggleButton>
 
                 <!-- Paste All Button (visible when items selected for multi-paste) -->
+                <!-- Right margin 6 (not 1): the accent button must not crowd the
+                     download pill next to it. 1 + 6 + pill's own 1 = 8px gap.
+                     Collapsed when nothing is selected, so no layout cost. -->
                 <Button Grid.Column="6" x:Name="PasteAllButton"
-                        Margin="1,0" VerticalAlignment="Center" Padding="0"
+                        Margin="1,0,6,0" VerticalAlignment="Center" Padding="0"
                         Height="{DynamicResource ToolBarBtnSize}"
                         HorizontalContentAlignment="Center"
                         Click="PasteAllButton_Click"
@@ -770,7 +774,7 @@
                                         <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.1,11 L6,16 L11.9,11"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- Network Upload -->
@@ -785,7 +789,7 @@
                                         <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.1,7 L6,2 L11.9,7"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- CPU - chip icon with pins -->
@@ -857,7 +861,7 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource CardBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center">
+                                <Border Background="Transparent" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="Padding" Value="6,0"/>
@@ -874,8 +878,17 @@
                                         </ToolTip>
                                     </Border.ToolTip>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <TextBlock Text="&#xE121;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0"/>
-                                        <TextBlock Text="{Binding DisplayName}" FontSize="9" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0" FontWeight="Bold" Opacity="0.7"/>
+                                        <!-- Font glyphs center their line box, not their ink: the clock
+                                             glyph hangs 2px below the value's baseline and the small
+                                             label's cap-center sits 1px low. Nudge both up so icon,
+                                             label and value share one visual center. RenderTransform
+                                             only — no layout/size change, so no pill clipping. -->
+                                        <TextBlock Text="&#xE121;" FontFamily="Segoe MDL2 Assets" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0">
+                                            <TextBlock.RenderTransform><TranslateTransform Y="-2"/></TextBlock.RenderTransform>
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="9" Foreground="{DynamicResource IconColor}" VerticalAlignment="Center" Margin="0,0,3,0" FontWeight="Bold" Opacity="0.7">
+                                            <TextBlock.RenderTransform><TranslateTransform Y="-1"/></TextBlock.RenderTransform>
+                                        </TextBlock>
                                         <TextBlock Text="{Binding Text}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" FontWeight="SemiBold" MinWidth="58" TextAlignment="Center"/>
                                     </StackPanel>
                                 </Border>
@@ -884,9 +897,9 @@
                     </ItemsControl>
                 </Border>
 
-                <!-- Plugin Widgets -->
+                <!-- Plugin Widgets (permanently hidden — plugins unused) -->
                 <Border Grid.Column="9" x:Name="PluginBorder" VerticalAlignment="Center" Margin="1,0"
-                        Visibility="{Binding ShowPlugins, Converter={StaticResource BoolToVis}}">
+                        Visibility="Collapsed">
                     <StackPanel x:Name="PluginContainer" Orientation="Horizontal" VerticalAlignment="Center"/>
                 </Border>
 

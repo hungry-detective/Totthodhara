@@ -30,7 +30,6 @@ namespace ClipDropPro.Services
         public bool ShowSystemMonitor { get; set; } = true;
         public bool ShowNetworkMonitor { get; set; } = true;
         public bool ShowCpuRamMonitor { get; set; } = true;
-        public bool ShowPlugins { get; set; } = true;
         public bool ShowWorldClock { get; set; } = false;
         public string WorldClockTimeZone { get; set; } = "US Mountain Standard Time";
         public System.Collections.Generic.List<string> PinnedWorldClockZones { get; set; } = new() { "Bangladesh Standard Time", "US Mountain Standard Time" };
@@ -44,8 +43,6 @@ namespace ClipDropPro.Services
         public bool TransparencyEffect { get; set; } = false;
         public bool FollowSystemTransparency { get; set; } = true;
         public bool RoundedCorners { get; set; } = true;
-        public bool ShowEverythingResults { get; set; } = true;
-        public string EverythingTrigger { get; set; } = ";";
     }
 
     public class SettingsService : ISettingsService
@@ -239,12 +236,6 @@ namespace ClipDropPro.Services
             set { _settings.ShowCpuRamMonitor = value; Save(); }
         }
 
-        public bool ShowPlugins
-        {
-            get => _settings.ShowPlugins;
-            set { _settings.ShowPlugins = value; Save(); }
-        }
-
         public bool ShowWorldClock
         {
             get => _settings.ShowWorldClock;
@@ -321,18 +312,6 @@ namespace ClipDropPro.Services
         {
             get => _settings.RoundedCorners;
             set { _settings.RoundedCorners = value; Save(); }
-        }
-
-        public bool ShowEverythingResults
-        {
-            get => _settings.ShowEverythingResults;
-            set { _settings.ShowEverythingResults = value; Save(); }
-        }
-
-        public string EverythingTrigger
-        {
-            get => _settings.EverythingTrigger;
-            set { _settings.EverythingTrigger = value ?? ";"; Save(); }
         }
     }
 }

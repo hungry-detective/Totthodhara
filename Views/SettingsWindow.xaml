@@ -351,8 +351,6 @@
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Behavior"/>
                 <RadioButton Content="Storage" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Storage}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Storage"/>
-                <RadioButton Content="Plugins" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Plugins}"
-                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Plugins"/>
                 <RadioButton Content="About" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=About}"
                              Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="About"/>
             </StackPanel>
@@ -877,66 +875,6 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-            </StackPanel>
-        </ScrollViewer>
-
-        <!-- Plugins Section -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Plugins}">
-            <StackPanel>
-                <TextBlock Text="Plugins" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
-
-                <!-- Plugins (enable + folder in one card) -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.RowSpan="2" Text="&#xE71C;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Enable plugins" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Load and display plugins on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center" IsChecked="{Binding ShowPlugins}"/>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="12,10,0,0">
-                            <TextBlock Text="Place plugins in the Plugins folder:" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                            <TextBlock Text="Plugins\CSharp\  -  C# DLL plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="0,4,0,0"/>
-                            <TextBlock Text="Plugins\JavaScript\  -  JS file plugins" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- Everything (toggle + trigger word in one card) -->
-                <Border Style="{StaticResource SettingCardStyle}">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-                        <TextBlock Grid.RowSpan="2" Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{DynamicResource IconColor}"/>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                            <TextBlock Text="Search files with Everything" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
-                            <TextBlock Text="Instant file results in shelf search (requires voidtools Everything running)" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
-                        </StackPanel>
-                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center" IsChecked="{Binding ShowEverythingResults}"/>
-                        <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="12,10,0,0" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Trigger word + Ctrl+; summons file search:" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox Text="{Binding EverythingTrigger, UpdateSourceTrigger=PropertyChanged}" Width="60" TextAlignment="Center"
-                                     Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
             </StackPanel>
         </ScrollViewer>
 

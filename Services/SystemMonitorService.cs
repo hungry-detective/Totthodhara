@@ -46,9 +46,7 @@ namespace ClipDropPro.Services
             }
 
             _interfaces = NetworkInterface.GetAllNetworkInterfaces()
-                .Where(ni => ni.OperationalStatus == OperationalStatus.Up
-                    && ni.NetworkInterfaceType != NetworkInterfaceType.Loopback
-                    && !IsFilterDriver(ni))
+                .Where(IsPhysicalAdapter)
                 .ToArray();
             _stopwatch.Start();
 
@@ -134,9 +132,7 @@ namespace ClipDropPro.Services
             {
                 if (_interfaces == null)
                     _interfaces = NetworkInterface.GetAllNetworkInterfaces()
-                        .Where(ni => ni.OperationalStatus == OperationalStatus.Up
-                            && ni.NetworkInterfaceType != NetworkInterfaceType.Loopback
-                            && !IsFilterDriver(ni))
+                        .Where(IsPhysicalAdapter)
                         .ToArray();
 
                 var elapsed = _stopwatch.Elapsed.TotalSeconds;
@@ -188,15 +184,40 @@ namespace ClipDropPro.Services
             _cpuCounter?.Dispose();
         }
 
-        private static bool IsFilterDriver(NetworkInterface ni)
+        /// <summary>
+        /// True only for real, physical NICs (wired or wireless).
+        ///
+        /// VPN tunnels (WireGuard / TAP / TUN) and other virtual adapters
+        /// re-count bytes that ALREADY passed the physical adapter underneath
+        /// them. Summing a tunnel AND its underlying NIC — the common
+        /// ProtonVPN / OpenVPN / Hyper-V-switch case — double-counts the same
+        /// traffic and reports roughly 2x the real speed. The physical NIC alone
+        /// is the ground truth for what actually hits the wire, which is also
+        /// what IDM and Task Manager report.
+        ///
+        /// Deliberately does NOT exclude by words like "Virtual"/"Hyper-V"/
+        /// "VirtualBox": inside a VM the guest's adapter IS its real link, and
+        /// filtering it out would report 0. Type is the reliable discriminator.
+        /// </summary>
+        private static bool IsPhysicalAdapter(NetworkInterface ni)
         {
-            var desc = ni.Description ?? ni.Name ?? "";
-            return desc.Contains("WFP", StringComparison.OrdinalIgnoreCase)
+            if (ni.OperationalStatus != OperationalStatus.Up)
+                return false;
+
+            if (ni.NetworkInterfaceType != NetworkInterfaceType.Ethernet
+                && ni.NetworkInterfaceType != NetworkInterfaceType.Wireless80211)
+                return false;
+
+            var desc = (ni.Description ?? "") + " " + (ni.Name ?? "");
+            return !(
+                desc.Contains("Filter Driver", StringComparison.OrdinalIgnoreCase)
                 || desc.Contains("Miniport", StringComparison.OrdinalIgnoreCase)
-                || desc.Contains("Filter Driver", StringComparison.OrdinalIgnoreCase)
                 || desc.Contains("LightWeight Filter", StringComparison.OrdinalIgnoreCase)
+                || desc.Contains("WFP", StringComparison.OrdinalIgnoreCase)
                 || desc.Contains("QoS Packet Scheduler", StringComparison.OrdinalIgnoreCase)
-                || desc.Contains("Virtual WiFi", StringComparison.OrdinalIgnoreCase);
+                || desc.Contains("Virtual WiFi", StringComparison.OrdinalIgnoreCase)
+                || desc.Contains("Wi-Fi Direct", StringComparison.OrdinalIgnoreCase)
+                || desc.Contains("Tunnel", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

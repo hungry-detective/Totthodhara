@@ -11,17 +11,12 @@ namespace ClipDropPro.Services
 
         public void RegisterHotkey(string keyString, ModifierKeys modifiers, Action action)
         {
-            RegisterHotkey(HotkeyId, keyString, modifiers, action);
-        }
-
-        public void RegisterHotkey(string id, string keyString, ModifierKeys modifiers, Action action)
-        {
             if (!Enum.TryParse(keyString, out Key key))
                 return;
 
             try
             {
-                HotkeyManager.Current.AddOrReplace(id, key, modifiers, (s, e) => action?.Invoke());
+                HotkeyManager.Current.AddOrReplace(HotkeyId, key, modifiers, (s, e) => action?.Invoke());
             }
             catch (Exception)
             {

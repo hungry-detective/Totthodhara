@@ -27,7 +27,6 @@ namespace ClipDropPro.Services
         bool ShowSystemMonitor { get; set; }
         bool ShowNetworkMonitor { get; set; }
         bool ShowCpuRamMonitor { get; set; }
-        bool ShowPlugins { get; set; }
         bool ShowWorldClock { get; set; }
         string WorldClockTimeZone { get; set; }
         System.Collections.Generic.List<string> PinnedWorldClockZones { get; set; }
@@ -41,8 +40,6 @@ namespace ClipDropPro.Services
         bool TransparencyEffect { get; set; }
         bool FollowSystemTransparency { get; set; }
         bool RoundedCorners { get; set; }
-        bool ShowEverythingResults { get; set; }
-        string EverythingTrigger { get; set; }
         void Save();
     }
 }

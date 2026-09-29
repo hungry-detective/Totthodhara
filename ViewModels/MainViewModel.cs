@@ -158,9 +158,6 @@ namespace ClipDropPro.ViewModels
         private bool _showCpuRamMonitor = true;
 
         [ObservableProperty]
-        private bool _showPlugins = true;
-
-        [ObservableProperty]
         private bool _showWorldClock = true;
 
         [ObservableProperty]
@@ -359,15 +356,7 @@ namespace ClipDropPro.ViewModels
             {
                 IsShelfVisible = !IsShelfVisible;
             });
-            // File-search summon (PowerToys-style): opens shelf search in
-            // Everything mode from anywhere. Fixed Ctrl+; — the trigger word
-            // itself can't be global (it would eat every ";" you type).
-            _hotkeyService.RegisterHotkey("EverythingSearchHotkey", "Oem1",
-                System.Windows.Input.ModifierKeys.Control,
-                () => EverythingSearchRequested?.Invoke());
         }
-
-        public event Action EverythingSearchRequested;
 
         public async Task LoadItemsAsync(bool forceReload = false)
         {
@@ -875,7 +864,6 @@ namespace ClipDropPro.ViewModels
             ShowSystemMonitor = _settingsService.ShowSystemMonitor;
             ShowNetworkMonitor = _settingsService.ShowNetworkMonitor;
             ShowCpuRamMonitor = _settingsService.ShowCpuRamMonitor;
-            ShowPlugins = _settingsService.ShowPlugins;
             ShowWorldClock = _settingsService.ShowWorldClock;
             WorldClockTimeZone = _settingsService.WorldClockTimeZone;
             MonitorsOnLeft = _settingsService.MonitorsOnLeft;
@@ -935,11 +923,6 @@ namespace ClipDropPro.ViewModels
                 _systemMonitorService.Start();
             else
                 _systemMonitorService.Stop();
-        }
-
-        partial void OnShowPluginsChanged(bool value)
-        {
-            _settingsService.ShowPlugins = value;
         }
 
         partial void OnShowNetworkMonitorChanged(bool value)
@@ -1241,8 +1224,9 @@ namespace ClipDropPro.ViewModels
             if (item == null) return;
             Log($"ItemClicked: STRICT COPY - {item.DisplayText}");
 
-            // Multi-paste mode: toggle selection instead of copy/paste
-            if (IsMultiPasteMode)
+            // Selection mode: Shift+click toggles selection instead of copy/paste
+            // (the old multi-paste toggle button is gone; Paste All pastes).
+            if (IsMultiPasteMode || IsShiftHeld())
             {
                 item.IsSelected = !item.IsSelected;
                 if (item.IsSelected)
@@ -1663,6 +1647,16 @@ namespace ClipDropPro.ViewModels
         private void NotifySelectedItemsChanged()
         {
             OnPropertyChanged(nameof(HasSelectedItems));
+        }
+
+        private static bool IsShiftHeld()
+        {
+            try
+            {
+                return System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.LeftShift)
+                    || System.Windows.Input.Keyboard.IsKeyDown(System.Windows.Input.Key.RightShift);
+            }
+            catch { return false; }
         }
 
         private async Task TrimHistoryAsync()
