@@ -359,7 +359,15 @@ namespace ClipDropPro.ViewModels
             {
                 IsShelfVisible = !IsShelfVisible;
             });
+            // File-search summon (PowerToys-style): opens shelf search in
+            // Everything mode from anywhere. Fixed Ctrl+; — the trigger word
+            // itself can't be global (it would eat every ";" you type).
+            _hotkeyService.RegisterHotkey("EverythingSearchHotkey", "Oem1",
+                System.Windows.Input.ModifierKeys.Control,
+                () => EverythingSearchRequested?.Invoke());
         }
+
+        public event Action EverythingSearchRequested;
 
         public async Task LoadItemsAsync(bool forceReload = false)
         {

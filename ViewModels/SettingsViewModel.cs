@@ -39,6 +39,8 @@ namespace ClipDropPro.ViewModels
             _autoCheckUpdates = _settingsService.AutoCheckUpdates;
             _silentAutoUpdate = _settingsService.SilentAutoUpdate;
             _hideClipboard = _settingsService.HideClipboard;
+            _showEverythingResults = _settingsService.ShowEverythingResults;
+            _everythingTrigger = _settingsService.EverythingTrigger ?? ";";
             _includeDIBInDrag = _settingsService.IncludeDIBInDrag;
             _transparencyEffect = _settingsService.TransparencyEffect;
             _followSystemTransparency = _settingsService.FollowSystemTransparency;
@@ -328,6 +330,22 @@ namespace ClipDropPro.ViewModels
         partial void OnHideClipboardChanged(bool value)
         {
             _settingsService.HideClipboard = value;
+        }
+
+        [ObservableProperty]
+        private bool _showEverythingResults = true;
+
+        partial void OnShowEverythingResultsChanged(bool value)
+        {
+            _settingsService.ShowEverythingResults = value;
+        }
+
+        [ObservableProperty]
+        private string _everythingTrigger = ";";
+
+        partial void OnEverythingTriggerChanged(string value)
+        {
+            _settingsService.EverythingTrigger = string.IsNullOrEmpty(value) ? ";" : value;
         }
 
         [ObservableProperty]

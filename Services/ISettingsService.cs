@@ -41,6 +41,8 @@ namespace ClipDropPro.Services
         bool TransparencyEffect { get; set; }
         bool FollowSystemTransparency { get; set; }
         bool RoundedCorners { get; set; }
+        bool ShowEverythingResults { get; set; }
+        string EverythingTrigger { get; set; }
         void Save();
     }
 }

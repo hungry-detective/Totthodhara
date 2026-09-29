@@ -44,6 +44,8 @@ namespace ClipDropPro.Services
         public bool TransparencyEffect { get; set; } = false;
         public bool FollowSystemTransparency { get; set; } = true;
         public bool RoundedCorners { get; set; } = true;
+        public bool ShowEverythingResults { get; set; } = true;
+        public string EverythingTrigger { get; set; } = ";";
     }
 
     public class SettingsService : ISettingsService
@@ -319,6 +321,18 @@ namespace ClipDropPro.Services
         {
             get => _settings.RoundedCorners;
             set { _settings.RoundedCorners = value; Save(); }
+        }
+
+        public bool ShowEverythingResults
+        {
+            get => _settings.ShowEverythingResults;
+            set { _settings.ShowEverythingResults = value; Save(); }
+        }
+
+        public string EverythingTrigger
+        {
+            get => _settings.EverythingTrigger;
+            set { _settings.EverythingTrigger = value ?? ";"; Save(); }
         }
     }
 }

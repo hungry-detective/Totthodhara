@@ -46,8 +46,14 @@
         <!-- Content DataTemplates for ItemContentSelector -->
         <DataTemplate x:Key="ImageContentTemplate">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Image Source="{Binding ThumbnailSource}" Width="{DynamicResource ImageThumbWidth}" Height="{DynamicResource ImageThumbHeight}" Stretch="UniformToFill"
-                       RenderOptions.BitmapScalingMode="Linear"/>
+                <!-- Rounded thumbnail: ImageBrush inside a rounded Border clips
+                     to the corner radius (plain Image.Clip can't track size) -->
+                <Border Width="{DynamicResource ImageThumbWidth}" Height="{DynamicResource ImageThumbHeight}"
+                        CornerRadius="5" VerticalAlignment="Center">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding ThumbnailSource}" Stretch="UniformToFill"/>
+                    </Border.Background>
+                </Border>
                 <TextBlock Text="{Binding ResolutionText}" FontSize="{DynamicResource ImageResFontSize}" FontWeight="SemiBold"
                            Foreground="{DynamicResource TextColor}" TextDecorations="None"
                            VerticalAlignment="Center" Margin="4,0,0,0"/>
@@ -180,17 +186,19 @@
                     <ColumnDefinition Width="Auto"/> <!-- More Button -->
                 </Grid.ColumnDefinitions>
 
-                <!-- Section dividers — only between major categories -->
+                <!-- Section dividers — REMOVED 2026-09-29: the 1px BorderColor rules
+                     read as black gashes on the compact bar. Kept collapsed
+                     (not deleted) for easy revert. -->
                 <Rectangle Grid.Column="0" Width="1" Height="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,6,0" Fill="{DynamicResource BorderColor}" Opacity="0.6" IsHitTestVisible="False"
-                           Visibility="{Binding ShowLeftMonitors, Converter={StaticResource InvertedBoolToVis}}"/>
-                <Rectangle Grid.Column="10" Width="1" Height="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,6,0" Fill="{DynamicResource BorderColor}" Opacity="0.6" IsHitTestVisible="False"
-                           Visibility="{Binding ShowSystemMonitor, Converter={StaticResource InvertedBoolToVis}}"/>
+                           Visibility="Collapsed"/>
+                <Rectangle Grid.Column="7" Width="1" Height="18" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,6,0" Fill="{DynamicResource BorderColor}" Opacity="0.6" IsHitTestVisible="False"
+                           Visibility="Collapsed"/>
 
                 <!-- Left Monitors - speed and hardware when on left -->
                 <StackPanel x:Name="LeftMonitorsPanel" Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0"
                             Visibility="{Binding ShowLeftMonitors, Converter={StaticResource BoolToVis}}">
                     <!-- Network Download Left -->
-                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="1,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
@@ -198,14 +206,14 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Viewbox Width="{DynamicResource SysMonitorArrowWidth}" Height="{DynamicResource SysMonitorArrowHeight}" VerticalAlignment="Center">
                                 <Canvas Width="12" Height="18">
-                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.3,12 L6,16 L11.7,12"/>
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.1,11 L6,16 L11.9,11"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="62" Margin="2,0,0,0"/>
+                            <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- Network Upload Left -->
-                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                    <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="1,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                             Visibility="{Binding ShowNetworkOnLeft, Converter={StaticResource BoolToVis}}">
                         <Border.ToolTip>
                             <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
@@ -213,10 +221,10 @@
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Viewbox Width="{DynamicResource SysMonitorArrowWidth}" Height="{DynamicResource SysMonitorArrowHeight}" VerticalAlignment="Center">
                                 <Canvas Width="12" Height="18">
-                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.3,6 L6,2 L11.7,6"/>
+                                    <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.1,7 L6,2 L11.9,7"/>
                                 </Canvas>
                             </Viewbox>
-                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="62" Margin="2,0,0,0"/>
+                            <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
                         </StackPanel>
                     </Border>
                     <!-- CPU Left -->
@@ -569,7 +577,7 @@
                 <!-- Scroll Right Button -->
                 <Button Grid.Column="3" Click="ScrollRight_Click" 
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}" 
-                        Margin="1,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
+                        Margin="1,0,3,0" VerticalAlignment="Center" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                         Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <Button.Style>
                         <Style TargetType="Button">
@@ -618,12 +626,13 @@
                     </Border>
                 </Popup>
 
-                <!-- Search Toggle Button / Inline Search Box -->
+                <!-- Search Toggle Button / Inline Search Box (left-click: clipboard, right-click: Everything files) -->
                 <Button Grid.Column="4" x:Name="SearchToggleButton"
                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
-                        Margin="1,0" VerticalAlignment="Center"
+                        Margin="1,0,3,0" VerticalAlignment="Center"
                         Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                         Click="SearchToggleButton_Click"
+                        PreviewMouseRightButtonUp="SearchButton_RightClick"
                         FocusVisualStyle="{x:Null}"
                         Visibility="{Binding HideClipboard, Converter={StaticResource InvertedBoolToVis}}">
                     <Button.Style>
@@ -656,10 +665,12 @@
                     </Button.Style>
                 </Button>
 
-                <!-- MultiPaste Toggle Button -->
+                <!-- MultiPaste Toggle Button (same template shape as the other
+                     toolbar buttons: padded Border + direct glyph. A bare
+                     ContentPresenter rendered a dark square here.) -->
                 <ToggleButton Grid.Column="5" x:Name="MultiPasteToggleButton"
                               Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}"
-                              Margin="1,0" VerticalAlignment="Center"
+                              Margin="1,0,7,0" VerticalAlignment="Center"
                               Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}"
                               FocusVisualStyle="{x:Null}"
                               IsChecked="{Binding IsMultiPasteMode}"
@@ -669,8 +680,12 @@
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Width="{DynamicResource ToolBarBtnSize}" Height="{DynamicResource ToolBarBtnSize}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Border x:Name="background" CornerRadius="8" Background="Transparent" Padding="1">
+                                            <ui:SymbolIcon Symbol="Clipboard24"
+                                                           FontSize="{DynamicResource ToolBarIconSize}"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{TemplateBinding Foreground}"/>
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsChecked" Value="True">
@@ -688,6 +703,10 @@
                                 </Setter.Value>
                             </Setter>
                             <Style.Triggers>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                </Trigger>
                                 <Trigger Property="IsMouseOver" Value="True">
                                     <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
                                     <Setter Property="Cursor" Value="Hand"/>
@@ -695,11 +714,6 @@
                             </Style.Triggers>
                         </Style>
                     </ToggleButton.Style>
-                    <ui:SymbolIcon Symbol="Clipboard24" 
-                                    FontSize="{DynamicResource ToolBarIconSize}"
-                                    HorizontalAlignment="Center" 
-                                    VerticalAlignment="Center" 
-                                    Foreground="{DynamicResource IconColor}"/>
                 </ToggleButton>
 
                 <!-- Paste All Button (visible when items selected for multi-paste) -->
@@ -741,11 +755,11 @@
                 </Button>
 
                 <!-- System Monitor Widgets -->
-<Border Grid.Column="10" VerticalAlignment="Center" Margin="0"
+<Border Grid.Column="7" VerticalAlignment="Center" Margin="0"
                         Visibility="{Binding ShowSystemMonitor, Converter={StaticResource BoolToVis}}">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                         <!-- Network Download -->
-                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="1,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                  Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
                                 <Border.ToolTip>
                                     <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Download speed"/></ToolTip>
@@ -753,14 +767,14 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <Viewbox Width="{DynamicResource SysMonitorArrowWidth}" Height="{DynamicResource SysMonitorArrowHeight}" VerticalAlignment="Center">
                                     <Canvas Width="12" Height="18">
-                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.3,12 L6,16 L11.7,12"/>
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,2 L6,15 M0.1,11 L6,16 L11.9,11"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="62" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding NetworkDownText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- Network Upload -->
-                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="4,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
+                        <Border Background="{DynamicResource WidgetBg}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0.5" CornerRadius="8" Padding="1,0" Margin="1,0,1,0" Height="{DynamicResource ToolBarBtnSize}" VerticalAlignment="Center"
                                  Visibility="{Binding ShowNetworkOnRight, Converter={StaticResource BoolToVis}}">
                             <Border.ToolTip>
                                 <ToolTip Background="{DynamicResource ToolTipBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"><TextBlock Text="Upload speed"/></ToolTip>
@@ -768,10 +782,10 @@
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                                 <Viewbox Width="{DynamicResource SysMonitorArrowWidth}" Height="{DynamicResource SysMonitorArrowHeight}" VerticalAlignment="Center">
                                     <Canvas Width="12" Height="18">
-                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.3,6 L6,2 L11.7,6"/>
+                                        <Path Stroke="{DynamicResource IconColor}" StrokeThickness="1.0" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent" Data="M6,16 L6,3 M0.1,7 L6,2 L11.9,7"/>
                                     </Canvas>
                                 </Viewbox>
-                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="62" Margin="2,0,0,0"/>
+                                <TextBlock Text="{Binding NetworkUpText}" FontSize="{DynamicResource SysMonitorTextSize}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" Width="{DynamicResource SysMonitorSpeedWidth}" Margin="2,0,0,0"/>
                             </StackPanel>
                         </Border>
                         <!-- CPU - chip icon with pins -->
@@ -871,13 +885,13 @@
                 </Border>
 
                 <!-- Plugin Widgets -->
-                <Border Grid.Column="9" VerticalAlignment="Center" Margin="1,0"
+                <Border Grid.Column="9" x:Name="PluginBorder" VerticalAlignment="Center" Margin="1,0"
                         Visibility="{Binding ShowPlugins, Converter={StaticResource BoolToVis}}">
                     <StackPanel x:Name="PluginContainer" Orientation="Horizontal" VerticalAlignment="Center"/>
                 </Border>
 
                 <!-- Right: More Button with Context Menu (shows app icon) -->
-                <Button Grid.Column="7"
+                <Button Grid.Column="10"
                         x:Name="MoreButton"
                         Background="Transparent"
                         BorderThickness="0"

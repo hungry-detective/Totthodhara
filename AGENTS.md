@@ -458,20 +458,38 @@ Also used in SettingsWindow:
 ### B. Bar sizes — `SetAppBarPos()` (exact values, cards stay even-height so centering lands on whole pixels)
 | Size | Bar | Card | Call |
 |---|---|---|---|
-| Small | 26 | 22 | `SetItemSizes(13, 1, 3, 1.5, 11, 24, 12, 16, 15)` |
-| Medium | 30 | 24 | `SetItemSizes(15, 2, 4, 1.5, 13, 28, 13, 18, 18)` |
-| Large | 36 | 30 | `SetItemSizes(19, 3, 5, 2.5, 14, 30, 15, 22, 22)` |
-Signature: `SetItemSizes(circle, margin, padH, padV, font, menuH, arrowW, arrowH, toolIcon)`. Radii: 10/12/14. Rule: **card height must be even, bar height even** — odd/even mismatch puts centering on a half-pixel and the top edge renders clipped/blurred.
-- Toolbar glyph sizes are **explicit per size** (15/18/22), NOT font-derived — Small must not change when tuning Medium/Large. Template `Padding="1"` (scroll L/R, search, settings). MultiPaste toggle has no padding (icon straight in box).
-- Fonts: Small 11, Medium 13, Large 14 (11–12px rendered as "pixel art" — 13px+ with the existing ClearType+Display text settings reads clean). Network value boxes fixed `Width="62"` (no layout jumps, no clip).
+| Small | 26 | 22 | `SetItemSizes(13, 1, 3, 1.5, 12, 24, 12, 16, 17, 60)` |
+| Medium | 30 | 24 | `SetItemSizes(15, 2, 4, 1.5, 14, 28, 13, 18, 19, 70)` |
+| Large | 36 | 30 | `SetItemSizes(19, 3, 5, 2.5, 15, 30, 15, 22, 22, 78)` |
+Signature: `SetItemSizes(circle, margin, padH, padV, font, menuH, arrowW, arrowH, toolIcon, speedW)`. Radii: 10/12/14. Rule: **card height must be even, bar height even** — odd/even mismatch puts centering on a half-pixel and the top edge renders clipped/blurred.
+- Toolbar glyph sizes are **explicit per size** (17/19/22 — matched to the hardware `SysMonitorCanvasSize` 18/20/21 so toolbar and monitor glyphs read the same size), NOT font-derived — Small must not change when tuning Medium/Large. Template `Padding="1"` (scroll L/R, search, settings). MultiPaste toggle has no padding (icon straight in box).
+- MultiPaste icon is the original `Clipboard24` glyph inside the unified padded-border template (a hand-drawn outline replacement was tried 2026-09-29 and reverted — user prefers the original). Same template shape as the other toolbar buttons.
+- LostFocus auto-close has a 400ms grace timer (`_searchFocusGrace`, cancelled by refocus/close): focus often bounces right after `Ctrl+;` summon and an instant close would eat the search.
+- Fonts: Small 12, Medium 14, Large 15 (11–12px rendered as "pixel art" — 13px+ with the existing ClearType+Display text settings reads clean).
 
 ### C. Toolbar spacing — uniform 2px gaps, one shared centerline
-- All 9 monitor/clock pills: `Margin="1,0,1,0"`. Monitor/clock outer containers + plugins: edge margins trimmed so every gap (chevron/search/multipaste/pills/gear) = 2px. Do NOT re-widen pill margins to 3.
-- Network value hugs arrow: left-aligned, `Margin="2,0,0,0"`. (Right-alignment was tried — it stranded dead space between arrow and value. Do NOT right-align.)
-- Right-side order (swapped 2026-09-29 on request): PasteAll → **gear (col 7)** → Clock (col 8) → Plugins (col 9) → **monitors rightmost (col 10)** + its divider rect moved with it. Only the two columns were exchanged; clock/plugins stay between.
+- All 9 monitor/clock pills: `Margin="1,0,1,0"`. Monitor/clock outer containers + plugins: edge margins trimmed so every gap (chevron/search/multipaste/pills/gear) = 2px — except multi-paste→monitors, which is 8px (`MultiPasteToggleButton Margin="1,0,7,0"`, widened on request). Chevron-right→search and search→multi-paste are 4px each. Do NOT re-widen pill margins to 3.
+- Network value hugs arrow: left-aligned, `Margin="4,0,0,0"`. (Right-alignment was tried — it stranded dead space between arrow and value. Do NOT right-align.)
+- Speed value box is FIXED per size via `SysMonitorSpeedWidth` (Small 60 / Medium 70 / Large 78 — compact; extreme max-digit strings may touch the edge for one tick, never jump). Do NOT use auto-width (row would jitter as speeds change).
+- Right-side order (2026-09-29): originally monitors→gear; briefly swapped gear↔monitors on request, then swapped BACK (same request) — final: PasteAll → monitors (col 7) → Clock (col 8) → Plugins (col 9) → **gear last (col 10)** + divider rect with monitors. Only those two columns ever move; clock/plugins stay between.
 
 ### D. Network arrows (PowerToys-style) — 12x18 canvas, stroke 1.0, per-size Viewbox (`SysMonitorArrowWidth/Height` resources, defaults in App.xaml)
-- Down: `M6,2 L6,15 M0.3,12 L6,16 L11.7,12` · Up: `M6,16 L6,3 M0.3,6 L6,2 L11.7,6` — head 11.4w × 4h, both arrows span y 2→16. All 4 instances (left+right panels) identical; left panel previously had off-center variants — do NOT reintroduce them.
+- Down: `M6,2 L6,15 M0.1,11 L6,16 L11.9,11` · Up: `M6,16 L6,3 M0.1,7 L6,2 L11.9,7` — head 11.8w × 5h, both arrows span y 2→16. All 4 instances (left+right panels) identical; left panel previously had off-center variants — do NOT reintroduce them.
 
 ### E. Taskbar tone matching (System + transparency only; explicit Light/Dark keep fixed frosts)
 - `BuildTaskbarMatchedBrush()`: wallpaper-average blend. Dark = avg×0.34 + `#222226`×0.66, alpha `0xF2`, channels clamped 0x16–0x4D (B to 0x55). Light = avg×0.12 + `#F7F7F7`×0.88, alpha `0xF4`, clamped 0xD8–0xFA/B. Tune blend/clamp if tone drifts — do NOT go back to flat fills in System mode.
+
+### F. Everything launcher search (shelf search box → file results)
+- `Services/EverythingService.cs`: official voidtools SDK via `Everything32.dll` (x86, 86KB, Content/PreserveNewest in csproj — ships next to exe). NEVER replace with raw IPC or es.exe.
+- Graceful-zero-dependency rule: DLL missing OR `Everything` process not running → empty results, shelf search stays clipboard-only. Never throw to the UI; `IsAvailable()` caches the process check 10s.
+- Queries run off-UI (`Task.Run`, serialized with a lock), debounced 250ms, min 2 chars, max 64 hits, stale-query dropped if text changed. Flags = FILENAME|PATH, `SetMatchPath(false)` (title-only: TRUE flooded 16479 path-term hits for "for me" and drowned the parent folder under its own children), sort = NAME_ASC. ZERO history: no run-count read/write, no GUI history touch. Launcher re-rank: exact name → starts-with → contains → path-only; folders first within a rank (verified: `For Me` folder #1).
+- Results popup (`_everythingWindow` in MainWindow): NOACTIVATE + topmost + immersive theme, all brushes via `SetResourceReference` (auto-adapts on OS flip — do NOT snapshot). Height estimate 48 + rows×56 (path wraps 2 lines max + full-path tooltip), hard-capped to free space above shelf. Real file icons via `ExtractAssociatedIcon`, cached by extension (cap 200); folders = Folder24 glyph, null-icon fallback = Document24.
+- Positioning rule: NEVER use `this.Top/Left` (WPF never sets them after SetWindowPos — AppBar quirk #20). Use `GetWindowRect` + DPI convert (`TransformToDevice.M22`). Monitor area via `MonitorFromWindow`+`GetMonitorInfo` on the shelf HWND (NOT `SystemParameters.WorkArea` — primary-only, clips on multi-monitor). Wrong anchor makes the popup cover the shelf/taskbar.
+- Popup `SizeToContent` MUST be `Manual` — `Height` mode ignores explicit `Height` and grows to all 30 rows (~1300px), blowing past the screen with the bottom cut off.
+- Row right-click menu (fresh snapshot brushes — separate visual tree): Open / Open containing folder (`explorer /select`, folders open directly) / Copy file (`SetFileDropList`) / Copy as path (`SetText`). Copies intentionally flow into clipboard history like any user copy — no guard.
+- Keys: Up/Down navigate, Enter opens (`UseShellExecute`), Ctrl+Enter reveals (`explorer /select`), Esc closes search (existing behavior preserved when no results). Folders open directly. `CloseSearch()` always tears down window + debounce + CTS.
+- Toggle: `ShowEverythingResults` (default true) in Settings → **Plugins** (moved out of Behavior). Interface + service + VM property must all be added together (see existing `HideClipboard` pattern).
+- Split-button: left-click/`Ctrl+F` = clipboard filter only (`_searchEverythingMode=false`); right-click (`SearchButton_RightClick`) = clipboard + Everything. Reset in `CloseSearch`.
+- Search box fill MUST stay `Transparent` (verified pixel-identical 45,55,85 vs bar 45,54,84): any fill — even `AppBackground` — double-filters the frosted wallpaper and renders a darker navy patch. Border-only + themed caret/text.
+- Trigger word: `EverythingTrigger` (default `;`, editable Plugins textbox, empty = off). `StripEverythingTrigger` strips the prefix: shelf filters + Everything searches the stripped name. Resolved per keystroke via `GetActiveEverythingQuery()` (also used for stale-drop compare — never compare raw box text).
+- Summon: global `Ctrl+;` (`EverythingSearchHotkey` via `IHotkeyService(id,...)` overload → `MainViewModel.EverythingSearchRequested` → MainWindow opens shelf + search in file mode). A bare `;` can NEVER be global (would eat keystrokes); typing the trigger while the shelf has focus also summons via `PreviewTextInput`.

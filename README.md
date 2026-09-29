@@ -15,6 +15,7 @@ Totthodhara is a modern, high-performance clipboard manager designed with a floa
 - **Drag Protection**: Dragging an item back onto the shelf does not create duplicates.
 - **Shelf-to-Shelf Reordering**: Ctrl+drag items to reorder or remove them from the shelf with visual feedback.
 - **Quick Search (Ctrl+F)**: Press the search button or Ctrl+F to open a search popup. Type to filter items instantly by text content, file name, or display title.
+- **Everything File Search**: With voidtools Everything running, shelf search also shows instant file/folder results in a launcher popup — Enter opens, Ctrl+Enter reveals in Explorer, Up/Down navigates. Toggle in Settings > Behavior.
 - **Pin to Top**: Pin important items to keep them at the top of the shelf, visually separated. Pinned items always appear before unpinned history.
 - **History Size Limit**: Configurable maximum number of items (Settings > Max History Items). Oldest unpinned items are automatically trimmed when the limit is exceeded.
 - **Multi-Paste Mode**: Toggle multi-paste mode (📋 button) to queue multiple items by clicking. Press "Paste All" to paste them all in sequence with one click.
