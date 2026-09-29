@@ -11,6 +11,15 @@ namespace ClipDropPro
             
             // Apply Mica effect and theme
             RegisterTheme();
+
+            // Native titlebar/scrollbars follow the effective theme. Content
+            // itself is all DynamicResource so it auto-adapts when MainWindow
+            // pushes new resources on an OS flip — window is also rebuilt fresh
+            // on every open (never a cached old-theme page).
+            SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(this, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
+            };
         }
 
         private void RegisterTheme()

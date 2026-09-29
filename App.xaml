@@ -46,6 +46,8 @@
             <sys:Double x:Key="ToolBarIconSize">14</sys:Double>
             <sys:Double x:Key="SysMonitorTextSize">12</sys:Double>
             <sys:Double x:Key="SysMonitorCanvasSize">16</sys:Double>
+            <sys:Double x:Key="SysMonitorArrowWidth">12</sys:Double>
+            <sys:Double x:Key="SysMonitorArrowHeight">18</sys:Double>
             <sys:Double x:Key="ItemSmallFontSize">11</sys:Double>
         </ResourceDictionary>
     </Application.Resources>

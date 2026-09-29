@@ -20,11 +20,73 @@ namespace ClipDropPro.Views
             
             ApplyThemeColors(viewModel.Theme);
 
+            // Live OS follow while open: System theme re-applies on flip.
+            // Event-driven only — no polling loops, no sleeps, no focus steal.
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += Settings_UserPreferenceChanged;
+            this.Closed += (s, e) =>
+            {
+                try { Microsoft.Win32.SystemEvents.UserPreferenceChanged -= Settings_UserPreferenceChanged; } catch { }
+            };
+
             var updateService = App.GetService<IUpdateService>();
             if (updateService != null)
             {
                 VersionText.Text = $"Version {updateService.GetCurrentVersion()}";
             }
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var src = System.Windows.Interop.HwndSource.FromHwnd(
+                    new System.Windows.Interop.WindowInteropHelper(this).Handle);
+                src?.AddHook(SettingsWndHook);
+            }
+            catch { }
+            RefreshImmersiveTheme();
+        }
+
+        private IntPtr SettingsWndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_SETTINGCHANGE = 0x001A;
+            const int WM_THEMECHANGED = 0x031A;
+            const int WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
+            if (msg == WM_SETTINGCHANGE || msg == WM_THEMECHANGED || msg == WM_DWMCOLORIZATIONCOLORCHANGED)
+            {
+                // Never show a mixed old-theme page with a new-theme titlebar:
+                // re-apply immediately when the OS flips while open.
+                if ((DataContext as SettingsViewModel)?.Theme == "System")
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        ApplyThemeColors("System");
+                    }));
+            }
+            return IntPtr.Zero;
+        }
+
+        private void Settings_UserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        {
+            if (e.Category != Microsoft.Win32.UserPreferenceCategory.General) return;
+            if ((DataContext as SettingsViewModel)?.Theme != "System") return;
+            if (!Dispatcher.CheckAccess())
+                Dispatcher.BeginInvoke(new Action(() => ApplyThemeColors("System")));
+            else
+                ApplyThemeColors("System");
+        }
+
+        private void RefreshImmersiveTheme()
+        {
+            try
+            {
+                string theme = (DataContext as SettingsViewModel)?.Theme
+                    ?? _settingsService?.Theme ?? "Dark";
+                bool isLight = theme == "Light" ||
+                    (theme == "System" && Services.OsThemeHelper.IsAppsLightTheme());
+                Services.OsThemeHelper.ApplyWindowTheme(this, isLight);
+            }
+            catch { }
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -76,11 +138,9 @@ namespace ClipDropPro.Views
         private void ApplyThemeColors(string theme)
         {
             bool isLight = theme == "Light";
+            // Fresh read on every apply — never a baked startup snapshot.
             if (theme == "System")
-            {
-                var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
-                isLight = registryValue != null && (int)registryValue == 1;
-            }
+                isLight = Services.OsThemeHelper.IsAppsLightTheme();
 
             void SetResource(string key, object value)
             {
@@ -119,6 +179,8 @@ namespace ClipDropPro.Views
                 SetResource("ShadowOpacity", 0.45d);
                 SetResource("ShadowColor", System.Windows.Media.Colors.Black);
             }
+
+            RefreshImmersiveTheme();
         }
 
         private async void CheckForUpdatesSettings_Click(object sender, RoutedEventArgs e)
@@ -280,6 +342,8 @@ namespace ClipDropPro.Views
             panel.Children.Add(body);
 
             // Spinner when checking
+            System.Windows.Media.Animation.Storyboard checkingSb = null;
+            bool? checkingLastLight = null;
             if (isChecking)
             {
                 var spinnerPanel = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Left };
@@ -300,6 +364,8 @@ namespace ClipDropPro.Views
                 System.Windows.Media.Animation.Storyboard.SetTargetProperty(fadeIn, new System.Windows.PropertyPath(System.Windows.Controls.TextBlock.OpacityProperty));
                 var sb = new System.Windows.Media.Animation.Storyboard();
                 sb.Children.Add(fadeIn);
+                checkingSb = sb;
+                checkingLastLight = Services.OsThemeHelper.CurrentResourcesAreLight();
                 spinnerDot.Loaded += (s, e) => sb.Begin();
                 spinnerPanel.Children.Add(spinnerDot);
                 panel.Children.Add(spinnerPanel);
@@ -355,11 +421,55 @@ namespace ClipDropPro.Views
             closeBtn.Click += (s, e) => win.Close();
 
             // Non-modal while checking so code can await; modal for results
+            // Fresh native theme on every show (titlebar, scrollbars).
+            win.SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
+            };
+            if (isChecking && checkingSb?.Children?.Count > 0)
+            {
+                // Re-check on each spinner-animation tick so the already-visible
+                // checking toast re-themes mid-display. No new timers — this is
+                // the existing animation's own tick.
+                var anim = checkingSb.Children[0];
+                anim.CurrentTimeInvalidated += (s, e) =>
+                {
+                    try
+                    {
+                        bool cur = Services.OsThemeHelper.CurrentResourcesAreLight();
+                        if (checkingLastLight != cur)
+                        {
+                            checkingLastLight = cur;
+                            win.Dispatcher.BeginInvoke(new Action(() =>
+                                RefreshDialogBrushes(win, titleBar, titleText, body)));
+                        }
+                    }
+                    catch { }
+                };
+            }
             if (isChecking)
                 win.Show();
             else
                 win.ShowDialog();
             return win;
+        }
+
+        private static void RefreshDialogBrushes(
+            System.Windows.Window win,
+            System.Windows.Controls.Border titleBar,
+            System.Windows.Controls.TextBlock titleText,
+            System.Windows.Controls.TextBlock body)
+        {
+            try
+            {
+                var app = System.Windows.Application.Current;
+                if (app == null || win == null) return;
+                if (app.Resources["WindowBg"] is System.Windows.Media.Brush wbg) { win.Background = wbg; titleBar.Background = wbg; }
+                if (app.Resources["BorderColor"] is System.Windows.Media.Brush bc) { win.BorderBrush = bc; titleBar.BorderBrush = bc; }
+                if (app.Resources["TextColor"] is System.Windows.Media.Brush tc) { titleText.Foreground = tc; body.Foreground = tc; }
+                Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight());
+            }
+            catch { }
         }
 
         private void ShowUpdateAvailableDialog(IUpdateService updateService, UpdateInfo info)
@@ -504,6 +614,10 @@ namespace ClipDropPro.Views
                 win.Close();
                 await RunUpdateWithProgressAsync(updateService, info);
             };
+            win.SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
+            };
             win.ShowDialog();
         }
 
@@ -584,6 +698,10 @@ namespace ClipDropPro.Views
                 statusText.Text = pct >= 100 ? "Download complete. Preparing update..." : $"Downloading {pct:F0}%...";
             });
 
+            win.SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
+            };
             win.Show();
             await System.Threading.Tasks.Task.Delay(200);
 

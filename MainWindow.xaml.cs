@@ -19,7 +19,7 @@ namespace ClipDropPro
         private readonly MainViewModel _viewModel;
         private const int DesiredHeight = 36;
 
-        private void SetItemSizes(double circleSize, double margin, double padH, double padV, double fontSize, double menuH = 36)
+        private void SetItemSizes(double circleSize, double margin, double padH, double padV, double fontSize, double menuH = 36, double arrowW = 12, double arrowH = 18, double toolIcon = 15)
         {
             double cardHeight = circleSize + (padV * 2) + 6;
             Resources["ItemCircleSize"] = circleSize;
@@ -43,11 +43,18 @@ namespace ClipDropPro
             Resources["ImageThumbHeight"] = fontSize + 6;
             Resources["ImageResFontSize"] = Math.Max(9, fontSize - 2);
 
-            // Toolbar button matches card height, icon scales with font
+            // Toolbar glyphs get breathing room inside their buttons so no edge
+            // ever clips at any bar size (content box = btn - padding).
+            // Icon size is explicit per bar size — Small stays compact while
+            // Medium/Large scale up proportionally with their buttons.
             double toolBarBtnSize = cardHeight;
-            double toolBarIconSize = fontSize + 6;
+            double toolBarIconSize = toolIcon;
             Resources["ToolBarBtnSize"] = toolBarBtnSize;
             Resources["ToolBarIconSize"] = toolBarIconSize;
+
+            // Network arrows scale with the bar so they always fill the pill.
+            Resources["SysMonitorArrowWidth"] = arrowW;
+            Resources["SysMonitorArrowHeight"] = arrowH;
 
             // System monitor sizes scale with bar size
             double sysIconSize = Math.Max(10, fontSize + 4);
@@ -247,6 +254,126 @@ namespace ClipDropPro
             }
         }
 
+        private void OnUserPreferenceChanged(object sender, Microsoft.Win32.UserPreferenceChangedEventArgs e)
+        {
+            // Only the OS color flip matters here; other prefs are ignored.
+            if (e.Category != Microsoft.Win32.UserPreferenceCategory.General) return;
+            CheckOsThemeChanged();
+        }
+
+        /// <summary>
+        /// Re-reads the OS app-mode fresh and re-themes when it flipped.
+        /// Called ONLY from existing timers/event handlers (fullscreen tick,
+        /// drag feedback, scroll animation, WndProc, SystemEvents) — never from
+        /// a new polling loop. No sleeps, no focus stealing.
+        /// </summary>
+        private void CheckOsThemeChanged()
+        {
+            try
+            {
+                if (_viewModel?.SettingsViewModel?.Theme != "System") return;
+                // Transparency toggle also restyles the taskbar — mirror it live.
+                // (No-op unless FollowSystemTransparency is on and it changed;
+                // the property chain re-themes by itself in that case.)
+                try { _viewModel.SettingsViewModel.SyncSystemTransparency(); } catch { }
+                string key = BuildThemeStateKey();
+                if (_lastThemeStateKey != key)
+                {
+                    _lastThemeStateKey = key;
+                    bool cur = Services.OsThemeHelper.IsAppsLightTheme();
+                    _lastOsLightTheme = cur;
+                    if (!Dispatcher.CheckAccess())
+                        Dispatcher.BeginInvoke(new Action(() => { UpdateTheme(); RefreshVisiblePopupThemes(); }));
+                    else
+                    {
+                        UpdateTheme();
+                        RefreshVisiblePopupThemes();
+                    }
+                }
+                else if (_deleteBubble != null || _dragPopup != null)
+                {
+                    // Same mode but a popup may be showing pre-flip brushes
+                    // (e.g. opened just before the event) — refresh cheaply.
+                    if (!Dispatcher.CheckAccess())
+                        Dispatcher.BeginInvoke(new Action(RefreshVisiblePopupThemes));
+                    else
+                        RefreshVisiblePopupThemes();
+                }
+            }
+            catch { }
+        }
+
+        private string BuildThemeStateKey()
+        {
+            try
+            {
+                bool light = Services.OsThemeHelper.IsAppsLightTheme();
+                bool trans = _viewModel?.SettingsViewModel?.TransparencyEffect == true;
+                string wp = trans ? Services.OsThemeHelper.GetWallpaperKey() : "-";
+                return light + "|" + trans + "|" + wp;
+            }
+            catch { return ""; }
+        }
+
+        private System.Windows.Media.Color GetCachedWallpaperAverage()
+        {
+            try
+            {
+                string key = Services.OsThemeHelper.GetWallpaperKey();
+                if (_cachedWallpaperKey == null || _cachedWallpaperKey != key)
+                {
+                    _cachedWallpaperKey = key;
+                    _cachedWallpaperAvg = Services.OsThemeHelper.GetWallpaperBottomAverage();
+                }
+            }
+            catch { }
+            return _cachedWallpaperAvg;
+        }
+
+        /// <summary>
+        /// Taskbar-matched frost: blend of the wallpaper tone behind the bar
+        /// with the neutral shelf base — the flat-brush equivalent of the
+        /// taskbar's blurred-wallpaper acrylic. Dark stays dark (channels
+        /// clamped), light stays light.
+        /// </summary>
+        private System.Windows.Media.Brush BuildTaskbarMatchedBrush(bool isLightTheme)
+        {
+            var avg = GetCachedWallpaperAverage();
+            if (isLightTheme)
+            {
+                // Taskbar light ≈ milky near-white acrylic: mostly neutral base
+                // with only a whisper of wallpaper, denser than dark mode.
+                byte R = (byte)Math.Min(0xFA, Math.Max(0xD8, avg.R * 0.12 + 0xF7 * 0.88));
+                byte G = (byte)Math.Min(0xFA, Math.Max(0xD8, avg.G * 0.12 + 0xF7 * 0.88));
+                byte B = (byte)Math.Min(0xFB, Math.Max(0xD8, avg.B * 0.12 + 0xF7 * 0.88));
+                return new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(0xF4, R, G, B));
+            }
+            else
+            {
+                byte R = (byte)Math.Min(0x4D, Math.Max(0x16, avg.R * 0.34 + 0x22 * 0.66));
+                byte G = (byte)Math.Min(0x4D, Math.Max(0x16, avg.G * 0.34 + 0x22 * 0.66));
+                byte B = (byte)Math.Min(0x55, Math.Max(0x16, avg.B * 0.34 + 0x26 * 0.66));
+                return new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(0xF2, R, G, B));
+            }
+        }
+
+        private void ApplyImmersiveForOpenWindows(bool isLightTheme)
+        {
+            try
+            {
+                var hwnd = new WindowInteropHelper(this).Handle;
+                if (hwnd != IntPtr.Zero)
+                    Services.OsThemeHelper.ApplyWindowTheme(hwnd, isLightTheme);
+                if (_deleteBubble != null)
+                    Services.OsThemeHelper.ApplyWindowTheme(_deleteBubble, isLightTheme);
+                if (_dragPopup != null)
+                    Services.OsThemeHelper.ApplyWindowTheme(_dragPopup, isLightTheme);
+            }
+            catch { }
+        }
+
         #region AppBar Logic
         [StructLayout(LayoutKind.Sequential)]
         struct RECT { public int left, top, right, bottom; }
@@ -313,6 +440,23 @@ namespace ClipDropPro
 
         [DllImport("dwmapi.dll", PreserveSig = false)]
         public static extern void DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        private static extern int SetWindowThemeNative(IntPtr hwnd, string pszSubAppName, string pszSubIdList);
+
+        // OS theme-change messages (live follow while open — no polling loops).
+        private const int WM_SETTINGCHANGE = 0x001A;
+        private const int WM_THEMECHANGED = 0x031A;
+        private const int WM_DWMCOLORIZATIONCOLORCHANGED = 0x0320;
+
+        // Last seen OS app-mode. Checked inside existing timers/handlers only.
+        private bool? _lastOsLightTheme = null;
+        // Full live-follow key: light|transparency|wallpaper. Any taskbar-affecting
+        // change (mode flip, transparency toggle, wallpaper swap) flips the key.
+        private string _lastThemeStateKey = null;
+        private string _cachedWallpaperKey = null;
+        private System.Windows.Media.Color _cachedWallpaperAvg =
+            System.Windows.Media.Color.FromRgb(0x2E, 0x3A, 0x55);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -473,10 +617,7 @@ namespace ClipDropPro
             var theme = _viewModel?.SettingsViewModel?.Theme ?? "Dark";
             bool isLightTheme = theme == "Light";
             if (theme == "System")
-            {
-                var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
-                isLightTheme = registryValue != null && (int)registryValue == 1;
-            }
+                isLightTheme = Services.OsThemeHelper.IsAppsLightTheme();
 
             var accentPolicy = new AccentPolicy
             {
@@ -530,10 +671,10 @@ namespace ClipDropPro
             double capsuleMarginV;
             switch (_viewModel.BarSize)
             {
-                case "Small": baseHeight = 32; capsuleRadius = rounded ? 12 : 0; capsuleMarginV = 0; SetItemSizes(16, 2, 4, 2, 12, 28); break;
-                case "Large": baseHeight = 50; capsuleRadius = rounded ? 20 : 0; capsuleMarginV = 0; SetItemSizes(28, 5, 7, 2, 15, 38); break;
+                case "Small": baseHeight = 26; capsuleRadius = rounded ? 10 : 0; capsuleMarginV = 0; SetItemSizes(13, 1, 3, 1.5, 11, 24, 12, 16, 15); break;
+                case "Large": baseHeight = 36; capsuleRadius = rounded ? 14 : 0; capsuleMarginV = 0; SetItemSizes(19, 3, 5, 2.5, 14, 30, 15, 22, 22); break;
                 case "Medium":
-                default: baseHeight = 34; capsuleRadius = rounded ? 14 : 0; capsuleMarginV = 0; SetItemSizes(18, 2, 4, 2, 13, 32); break;
+                default: baseHeight = 30; capsuleRadius = rounded ? 12 : 0; capsuleMarginV = 0; SetItemSizes(15, 2, 4, 1.5, 13, 28, 13, 18, 18); break;
             }
 
             bool isTop = _viewModel.ShelfPosition == "Top";
@@ -682,6 +823,13 @@ namespace ClipDropPro
             // Re-register clipboard listener after wake from sleep/standby
             Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
 
+            // Live OS theme follow: re-theme immediately when the user flips
+            // Windows Dark↔Light while open (System theme only). No polling —
+            // this is the existing SystemEvents channel, no new loops/sleeps.
+            Microsoft.Win32.SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
+            _lastOsLightTheme = Services.OsThemeHelper.IsAppsLightTheme();
+            _lastThemeStateKey = BuildThemeStateKey();
+
             // Also re-register on window activation — catches any case where the listener was lost
             this.Activated += OnWindowActivated;
 
@@ -789,6 +937,9 @@ namespace ClipDropPro
 
         private void FullScreenCheckTimer_Tick(object sender, EventArgs e)
         {
+            // Live OS theme follow inside the existing 50ms tick — no new timer.
+            CheckOsThemeChanged();
+
             IntPtr foregroundWindow = GetForegroundWindow();
             if (foregroundWindow == IntPtr.Zero) return;
 
@@ -939,6 +1090,11 @@ namespace ClipDropPro
             if (msg == WM_CLIPBOARDUPDATE)
             {
                 _viewModel.ProcessClipboardChange();
+            }
+            else if (msg == WM_SETTINGCHANGE || msg == WM_THEMECHANGED || msg == WM_DWMCOLORIZATIONCOLORCHANGED)
+            {
+                // Windows Dark↔Light flip while open → re-theme live, no restart.
+                CheckOsThemeChanged();
             }
             else if (msg == uCallbackMessage)
             {
@@ -1183,22 +1339,23 @@ namespace ClipDropPro
                 // ── Light / Dark / System ─────────────────────────────────────
                 bool isLightTheme = theme == "Light";
                 if (theme == "System")
-                {
-                    var registryValue = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0);
-                    isLightTheme = registryValue != null && (int)registryValue == 1;
-                }
+                    isLightTheme = Services.OsThemeHelper.IsAppsLightTheme();
 
                 // Frosted fills layered over live DWM acrylic blur (see EnableAcrylic).
                 // Dark mode uses a subtle vertical gradient for depth instead of flat #141414
                 System.Windows.Media.Brush shelfBrush;
                 if (transparencyEnabled)
                 {
-                    // Frosted glass: deep fill over the blurred background so the
-                    // capsule silhouette (incl. rounded corners) reads clearly.
-                    // 0xE6 keeps the glass feel while restoring edge contrast.
-                    shelfBrush = isLightTheme
-                        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF))
-                        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xE6, 0x22, 0x22, 0x26));
+                    // System mode: taskbar-matched frost (wallpaper-tinted, like
+                    // DWM's blurred acrylic). Explicit Light/Dark keep the fixed
+                    // frost so a pinned choice never drifts with the wallpaper.
+                    // (Real DWM blur stays off — it fills the rounded corners.)
+                    if (theme == "System")
+                        shelfBrush = BuildTaskbarMatchedBrush(isLightTheme);
+                    else
+                        shelfBrush = isLightTheme
+                            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xF2, 0xFF, 0xFF, 0xFF))
+                            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xF2, 0x22, 0x22, 0x26));
                 }
                 else if (isLightTheme)
                 {
@@ -1306,6 +1463,20 @@ namespace ClipDropPro
             ForceRefreshVisualTree(this);
 
             EnableAcrylic();
+
+            // Keep the OS-flip detector in sync and push the effective mode to
+            // native titlebars/controls (attrs 20 + 19, Explorer theme) so an
+            // already-visible toast/bubble re-themes mid-display on next tick.
+            try
+            {
+                if (theme == "System")
+                    _lastOsLightTheme = Services.OsThemeHelper.IsAppsLightTheme();
+                _lastThemeStateKey = BuildThemeStateKey();
+                bool effLight = theme == "Light" ||
+                    (theme == "System" && (_lastOsLightTheme == true));
+                ApplyImmersiveForOpenWindows(effLight);
+            }
+            catch { }
 
             Log("Theme updated.");
         }
@@ -1426,6 +1597,8 @@ namespace ClipDropPro
 
         protected override void OnClosed(EventArgs e)
         {
+            try { Microsoft.Win32.SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged; } catch { }
+            try { Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged; } catch { }
             Log($"OnClosed invoked. StackTrace:\n{Environment.StackTrace}");
             base.OnClosed(e);
         }
@@ -1461,6 +1634,8 @@ namespace ClipDropPro
         }
 
         private System.Windows.Window _deleteBubble;
+        private System.Windows.Controls.TextBlock _deleteBubbleText;
+        private System.Windows.Controls.Border _dragPopupBorder;
         private bool _dismissingBubble;
         private bool _isPotentialClick;
         private ClipboardItem _clickedItem;
@@ -1581,8 +1756,11 @@ namespace ClipDropPro
         {
             CloseDeleteBubble();
 
+            // Fresh read on every show so an OS flip just before opening is honored.
             var cardBg = System.Windows.Application.Current.Resources["CardBg"] as System.Windows.Media.SolidColorBrush;
             var baseCardColor = cardBg != null ? cardBg.Color : System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x28);
+            var textBrush = System.Windows.Application.Current.Resources["TextColor"] as System.Windows.Media.Brush
+                ?? System.Windows.Media.Brushes.White;
 
             var ft = new System.Windows.Media.FormattedText(
                 "✕  Remove this item",
@@ -1607,21 +1785,24 @@ namespace ClipDropPro
             _deleteBubble.ShowInTaskbar = false;
             _deleteBubble.ShowActivated = false;
             _deleteBubble.ResizeMode = System.Windows.ResizeMode.NoResize;
-            _deleteBubble.Content = new System.Windows.Controls.TextBlock
+            _deleteBubbleText = new System.Windows.Controls.TextBlock
             {
                 Text = "✕  Remove this item",
-                Foreground = System.Windows.Media.Brushes.White,
+                Foreground = textBrush,
                 FontSize = 12,
                 Cursor = System.Windows.Input.Cursors.Hand,
                 HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
                 VerticalAlignment = System.Windows.VerticalAlignment.Center
             };
+            _deleteBubble.Content = _deleteBubbleText;
 
             _deleteBubble.Loaded += (s, args) =>
             {
                 var itemCenter = source.PointToScreen(new System.Windows.Point(source.ActualWidth / 2, 0));
                 _deleteBubble.Left = itemCenter.X - bw / 2;
                 _deleteBubble.Top = this.Top + this.Height + 4;
+                // Native titlebar/controls follow the effective theme too.
+                try { Services.OsThemeHelper.ApplyWindowTheme(_deleteBubble, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
             };
 
             _deleteBubble.MouseLeftButtonDown += (s, args) =>
@@ -1629,7 +1810,59 @@ namespace ClipDropPro
                 CloseDeleteBubble();
                 _ = _viewModel.DeleteItemCommand.ExecuteAsync(item);
             };
+            _deleteBubble.Closed += (s, args) => { _deleteBubbleText = null; };
             _deleteBubble.Show();
+        }
+
+        /// <summary>
+        /// Re-themes already-visible popups mid-display (called from existing
+        /// timer ticks / OS-flip handlers — never a new loop).
+        /// </summary>
+        private void RefreshVisiblePopupThemes()
+        {
+            try
+            {
+                var textBrush = System.Windows.Application.Current.Resources["TextColor"] as System.Windows.Media.Brush;
+                var cardBg = System.Windows.Application.Current.Resources["CardBg"] as System.Windows.Media.SolidColorBrush;
+                bool isLight = Services.OsThemeHelper.CurrentResourcesAreLight();
+                if (_deleteBubble != null)
+                {
+                    if (cardBg != null)
+                        _deleteBubble.Background = new System.Windows.Media.SolidColorBrush(cardBg.Color);
+                    if (_deleteBubbleText != null && textBrush != null)
+                        _deleteBubbleText.Foreground = textBrush;
+                    Services.OsThemeHelper.ApplyWindowTheme(_deleteBubble, isLight);
+                }
+                if (_dragPopup != null && _dragPopupBorder != null)
+                {
+                    UpdateDragPopupBrushes(isLight);
+                    Services.OsThemeHelper.ApplyWindowTheme(_dragPopup, isLight);
+                }
+            }
+            catch { }
+        }
+
+        private void UpdateDragPopupBrushes(bool isLight)
+        {
+            try
+            {
+                if (_dragPopupBorder == null) return;
+                _dragPopupBorder.Background = isLight
+                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(225, 0xFF, 0xFF, 0xFF))
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0x22, 0x22, 0x28));
+                var fg = isLight
+                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22))
+                    : (System.Windows.Media.Brush)System.Windows.Media.Brushes.White;
+                if (_dragPopupBorder.Child is System.Windows.Controls.StackPanel stack)
+                {
+                    foreach (var child in stack.Children)
+                    {
+                        if (child is System.Windows.Controls.TextBlock tb) tb.Foreground = fg;
+                        else if (child is Border b && b.Child is System.Windows.Controls.TextBlock btb) btb.Foreground = fg;
+                    }
+                }
+            }
+            catch { }
         }
 
         // Context menu dismiss on any click outside
@@ -1839,6 +2072,11 @@ namespace ClipDropPro
             itemW = Math.Max(itemW, 50);
 
             var stack = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+            // Fresh read on every show: ghost follows the effective theme.
+            bool ghostLight = Services.OsThemeHelper.CurrentResourcesAreLight();
+            var ghostFg = ghostLight
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x22, 0x22, 0x22))
+                : (System.Windows.Media.Brush)System.Windows.Media.Brushes.White;
             stack.Children.Add(new Border
             {
                 Width = circleSize,
@@ -1848,7 +2086,7 @@ namespace ClipDropPro
                 Child = new System.Windows.Controls.TextBlock
                 {
                     Text = item.Index.ToString(),
-                    Foreground = System.Windows.Media.Brushes.White,
+                    Foreground = ghostFg,
                     FontSize = fontSize,
                     FontWeight = System.Windows.FontWeights.Bold,
                     HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
@@ -1858,7 +2096,7 @@ namespace ClipDropPro
             stack.Children.Add(new System.Windows.Controls.TextBlock
             {
                 Text = text,
-                Foreground = System.Windows.Media.Brushes.White,
+                Foreground = ghostFg,
                 FontSize = fontSize,
                 VerticalAlignment = System.Windows.VerticalAlignment.Center,
                 Margin = new System.Windows.Thickness(4, 0, 6, 0)
@@ -1877,7 +2115,9 @@ namespace ClipDropPro
             _dragPopup.IsHitTestVisible = false;
             var dragBorder = new Border
             {
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0x22, 0x22, 0x28)),
+                Background = ghostLight
+                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(225, 0xFF, 0xFF, 0xFF))
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(200, 0x22, 0x22, 0x28)),
                 CornerRadius = new System.Windows.CornerRadius(6),
                 Padding = new System.Windows.Thickness(padH, padV, padH, padV),
                 RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
@@ -1885,8 +2125,11 @@ namespace ClipDropPro
                 Opacity = 0.85,
                 Child = stack
             };
+            _dragPopupBorder = dragBorder;
             _dragPopup.Content = dragBorder;
+            _dragPopup.Closed += (s, args) => { _dragPopupBorder = null; };
             _dragPopup.Show();
+            try { Services.OsThemeHelper.ApplyWindowTheme(_dragPopup, ghostLight); } catch { }
         }
 
         private void CloseDragPopup()
@@ -1895,6 +2138,7 @@ namespace ClipDropPro
             {
                 _dragPopup.Close();
                 _dragPopup = null;
+                _dragPopupBorder = null;
             }
         }
 
@@ -1922,6 +2166,8 @@ namespace ClipDropPro
         private void GiveFeedbackHandler(object sender, System.Windows.GiveFeedbackEventArgs e)
         {
             UpdateDragPopupPosition();
+            // Re-check on each drag-feedback tick so the ghost re-themes mid-drag.
+            CheckOsThemeChanged();
             e.UseDefaultCursors = true;
             e.Handled = true;
         }
@@ -1944,6 +2190,9 @@ namespace ClipDropPro
             var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
             timer.Tick += (s, e) =>
             {
+                // Re-check on each scroll-animation tick so a visible toast
+                // re-themes mid-display without any new polling loop.
+                CheckOsThemeChanged();
                 double elapsed = sw.ElapsedMilliseconds;
                 double t = Math.Min(elapsed / duration, 1.0);
                 // Cubic ease-out
@@ -2216,6 +2465,10 @@ namespace ClipDropPro
             titleBar.MouseLeftButtonDown += (s, e) =>
             {
                 if (e.ClickCount == 1) win.DragMove();
+            };
+            win.SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
             };
 
             // Cancel token source

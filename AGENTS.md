@@ -442,3 +442,36 @@ Also used in SettingsWindow:
 18. **Shelf stacks above taskbar** — `FindWindow("Shell_TrayWnd")` + `GetWindowRect` queries actual taskbar position. Shelf is placed directly above it (for bottom position) instead of at the screen edge.
 19. **Outer wrapper Border with `ClipToBounds="True"`** surrounds CapsuleBorder as a safety net against any visual bleed.
 20. **AppBar position: only WPF Width/Height set after SetWindowPos** — Left/Top NOT set synchronously to prevent WPF re-layout shifting the window by 1-2px due to DPI rounding.
+
+---
+
+## Session 2026-09-29 — Live OS Theme + Shelf Resizing (DO NOT regress)
+
+### A. Live OS theme follow (System mode) — `Services/OsThemeHelper.cs` (new file)
+- `IsAppsLightTheme()` reads **fresh every call**: `AppsUseLightTheme` first, fallback `SystemUsesLightTheme` (`HKCU\...\Themes\Personalize`). Never cache the mode.
+- `ApplyWindowTheme(hwnd, isLight)`: sets **both** `DwmSetWindowAttribute` 20 (Win10 20H1+) **and** legacy 19, plus `SetWindowTheme("DarkMode_Explorer"/"Explorer")`. List views stay on Explorer (correct dark scrollbars) — only headers may use `DarkMode_ItemsView`. Custom row colors untouched.
+- `GetWallpaperKey()` / `GetWallpaperBottomAverage()`: wallpaper file path + timestamp (or solid `Control Panel\Colors\Background`), bottom-seventh center band downscaled to 1x1. Image is re-read ONLY when the key changes.
+- Detection uses **existing channels only, no new timers/sleeps**: `SystemEvents.UserPreferenceChanged`, `HwndHandler` `WM_SETTINGCHANGE / WM_THEMECHANGED / WM_DWMCOLORIZATIONCOLORCHANGED`, OS-state check inside the 50ms fullscreen tick + drag `GiveFeedbackHandler` + scroll animation tick. Key = `light|transparency|wallpaper` (`BuildThemeStateKey`) — any taskbar-affecting change flips it.
+- `MainWindow.UpdateTheme()` / `EnableAcrylic()` / `SettingsWindow.ApplyThemeColors()` all use the helper (NOT one-shot startup reads). `ACRYLICBLURBEHIND` stays OFF (rounded-corner fill, verified).
+- Every popup reads theme fresh on show + `SourceInitialized` immersive apply: `ThemedMessageBox`, delete bubble, drag ghost, all update dialogs, `WhatsNewWindow`. Visible bubble/ghost re-theme mid-display via `RefreshVisiblePopupThemes()`. Settings window (rebuilt per open) re-applies on flip while open + spinner `CurrentTimeInvalidated` re-check. Delete bubble + drag ghost are **light-aware** (bubble was hardcoded white text — wrong on light).
+
+### B. Bar sizes — `SetAppBarPos()` (exact values, cards stay even-height so centering lands on whole pixels)
+| Size | Bar | Card | Call |
+|---|---|---|---|
+| Small | 26 | 22 | `SetItemSizes(13, 1, 3, 1.5, 11, 24, 12, 16, 15)` |
+| Medium | 30 | 24 | `SetItemSizes(15, 2, 4, 1.5, 13, 28, 13, 18, 18)` |
+| Large | 36 | 30 | `SetItemSizes(19, 3, 5, 2.5, 14, 30, 15, 22, 22)` |
+Signature: `SetItemSizes(circle, margin, padH, padV, font, menuH, arrowW, arrowH, toolIcon)`. Radii: 10/12/14. Rule: **card height must be even, bar height even** — odd/even mismatch puts centering on a half-pixel and the top edge renders clipped/blurred.
+- Toolbar glyph sizes are **explicit per size** (15/18/22), NOT font-derived — Small must not change when tuning Medium/Large. Template `Padding="1"` (scroll L/R, search, settings). MultiPaste toggle has no padding (icon straight in box).
+- Fonts: Small 11, Medium 13, Large 14 (11–12px rendered as "pixel art" — 13px+ with the existing ClearType+Display text settings reads clean). Network value boxes fixed `Width="62"` (no layout jumps, no clip).
+
+### C. Toolbar spacing — uniform 2px gaps, one shared centerline
+- All 9 monitor/clock pills: `Margin="1,0,1,0"`. Monitor/clock outer containers + plugins: edge margins trimmed so every gap (chevron/search/multipaste/pills/gear) = 2px. Do NOT re-widen pill margins to 3.
+- Network value hugs arrow: left-aligned, `Margin="2,0,0,0"`. (Right-alignment was tried — it stranded dead space between arrow and value. Do NOT right-align.)
+- Right-side order (swapped 2026-09-29 on request): PasteAll → **gear (col 7)** → Clock (col 8) → Plugins (col 9) → **monitors rightmost (col 10)** + its divider rect moved with it. Only the two columns were exchanged; clock/plugins stay between.
+
+### D. Network arrows (PowerToys-style) — 12x18 canvas, stroke 1.0, per-size Viewbox (`SysMonitorArrowWidth/Height` resources, defaults in App.xaml)
+- Down: `M6,2 L6,15 M0.3,12 L6,16 L11.7,12` · Up: `M6,16 L6,3 M0.3,6 L6,2 L11.7,6` — head 11.4w × 4h, both arrows span y 2→16. All 4 instances (left+right panels) identical; left panel previously had off-center variants — do NOT reintroduce them.
+
+### E. Taskbar tone matching (System + transparency only; explicit Light/Dark keep fixed frosts)
+- `BuildTaskbarMatchedBrush()`: wallpaper-average blend. Dark = avg×0.34 + `#222226`×0.66, alpha `0xF2`, channels clamped 0x16–0x4D (B to 0x55). Light = avg×0.12 + `#F7F7F7`×0.88, alpha `0xF4`, clamped 0xD8–0xFA/B. Tune blend/clamp if tone drifts — do NOT go back to flat fills in System mode.

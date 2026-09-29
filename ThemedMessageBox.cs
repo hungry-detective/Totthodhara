@@ -187,6 +187,13 @@ namespace ClipDropPro
             };
             closeBtn.Click += (s, e) => { dialogResult = Result.Cancel; win.Close(); };
 
+            // Native titlebar/controls follow the effective theme (fresh read on
+            // every show — an OS flip just before opening is honored).
+            win.SourceInitialized += (s, e) =>
+            {
+                try { Services.OsThemeHelper.ApplyWindowTheme(win, Services.OsThemeHelper.CurrentResourcesAreLight()); } catch { }
+            };
+
             win.ShowDialog();
             return dialogResult;
         }
