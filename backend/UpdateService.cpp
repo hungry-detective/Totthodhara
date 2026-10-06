@@ -16,6 +16,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <QTimer>
 
 UpdateService::UpdateService(QObject *parent)
     : QObject(parent)
@@ -294,8 +295,10 @@ void UpdateService::proceedInstall()
         return;
     }
     // Handed off: the updater script finishes the job after we exit.
-    // (busy stays true; the process is going away.)
-    QCoreApplication::quit();
+    // (busy stays true; the process is going away.) The short delay lets
+    // the "installing" state actually paint before the windows go away.
+    emit installStarted();
+    QTimer::singleShot(1200, this, [] { QCoreApplication::quit(); });
 }
 
 QString UpdateService::cacheFile()
@@ -361,10 +364,16 @@ bool UpdateService::stageAndLaunch(const QString &zipPath)
     const QString escStage = QString(stage).replace(QLatin1Char('\''), QStringLiteral("''"));
     QTextStream s(&f);
     s << "@echo off\n";
+    s << "title Totthodhara Update\n";
+    s << "echo ========================================\n";
+    s << "echo  Totthodhara is updating - please wait.\n";
+    s << "echo  Do not close this window.\n";
+    s << "echo ========================================\n";
     s << "set \"ROOT=" << root << "\"\n";
     s << "set \"STAGE=" << stage << "\"\n";
     s << "set \"ZIP=" << zipPath << "\"\n";
     // 1. Wait until the app (and its file locks + mutex) are really gone.
+    s << "echo [1/4] Waiting for the app to exit...\n";
     s << ":waitloop\n";
     s << "taskkill /F /IM Totthodhara.exe >nul 2>&1\n";
     s << "ping -n 2 127.0.0.1 >nul\n";
@@ -372,28 +381,40 @@ bool UpdateService::stageAndLaunch(const QString &zipPath)
     s << "if errorlevel 1 goto waitloop\n";
     s << "del /F /Q \"%TEMP%\\__tott_updlock\" >nul 2>&1\n";
     // 2. Unpack the release next to it.
+    s << "echo [2/4] Unpacking the new version...\n";
     s << "powershell -NoProfile -Command \"Expand-Archive -Force '" << escZip << "' '" << escStage << "\\new'\"\n";
     s << "if errorlevel 1 goto fail\n";
     // 3. Verify the staged layout BEFORE wiping anything: a wrong-shaped
     // zip (or dead copy) must never brick the install into stub-less limbo.
+    s << "echo [3/4] Verifying the package...\n";
     s << "if not exist \"%STAGE%\\new\\library\\Totthodhara.exe\" goto fail\n";
     s << "if not exist \"%STAGE%\\new\\Totthodhara.exe\" goto fail\n";
     // 4. Replace everything except data/ (history.db, clips, settings).
+    s << "echo [4/4] Installing files (your clips and settings are kept)...\n";
     s << "for /D %%D in (\"%ROOT%\\*\") do if /I not \"%%~nxD\"==\"data\" rmdir /S /Q \"%%D\"\n";
     s << "del /Q \"%ROOT%\\*\" >nul 2>&1\n";
     s << "xcopy \"%STAGE%\\new\\*\" \"%ROOT%\\\" /E /I /Y >nul\n";
     s << "if errorlevel 1 goto fail\n";
     // 5. Relaunch + clean up the stage.
+    s << "echo Done - starting Totthodhara...\n";
     s << "start \"\" \"%ROOT%\\Totthodhara.exe\"\n";
+    s << "ping -n 5 127.0.0.1 >nul\n";
     s << "rmdir /S /Q \"%STAGE%\"\n";
     s << "exit /b 0\n";
     // Any failure relaunches the (untouched or restored) install so the
     // user is never left staring at a closed app.
     s << ":fail\n";
+    s << "echo Something went wrong - starting your current version instead.\n";
     s << "start \"\" \"%ROOT%\\Totthodhara.exe\"\n";
+    s << "ping -n 5 127.0.0.1 >nul\n";
     s << "rmdir /S /Q \"%STAGE%\"\n";
     s << "exit /b 1\n";
     f.close();
+    // Plain detached launch: cmd.exe shows the titled console above and
+    // narrates the replace phase step by step. (NOTE: do NOT route this
+    // through `cmd /c start` with a pre-quoted title — QProcess quotes
+    // spaced args itself, double quotes silently break the launch and the
+    // script never runs. Verified the hard way.)
     if (!QProcess::startDetached(script, {})) {
         emit installFailed(tr("Could not start the updater."));
         return false;

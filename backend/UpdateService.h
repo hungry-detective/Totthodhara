@@ -37,6 +37,7 @@ signals:
     void checkFinished(bool available, const QString &version, const QString &notes);
     void checkFailed(const QString &error);
     void downloadProgress(qint64 received, qint64 total);
+    void installStarted();
     void installFailed(const QString &error);
 
 private slots:

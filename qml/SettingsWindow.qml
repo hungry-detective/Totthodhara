@@ -924,13 +924,16 @@ Window {
                                     text: updState === "checking" ? "Checking…"
                                         : updState === "available" ? "Download " + updVersion + " & restart"
                                         : updState === "downloading" ? updateLabel.text
+                                        : updState === "installing" ? "Installing…"
                                         : "Check for updates"
                                     enabled: (updState === "idle" || updState === "available") && !Updater.busy
                                     onClicked: {
                                         if (updState === "available")
                                             Updater.downloadAndInstall()
-                                        else
+                                        else {
+                                            updateButton.updState = "checking"
                                             Updater.checkForUpdates()
+                                        }
                                     }
                                     background: Rectangle {
                                         implicitWidth: 210
@@ -945,6 +948,31 @@ Window {
                                         color: "white"
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
+                                ProgressBar {
+                                    id: dlBar
+                                    Layout.alignment: Qt.AlignHCenter
+                                    implicitWidth: 260
+                                    visible: updateButton.updState === "downloading"
+                                        || updateButton.updState === "installing"
+                                    from: 0
+                                    to: 100
+                                    value: updateButton.updState === "installing" ? 100 : dlPct
+                                    property real dlPct: 0
+                                    background: Rectangle {
+                                        implicitWidth: 260
+                                        implicitHeight: 8
+                                        radius: 4
+                                        color: AppState.cardBg
+                                    }
+                                    contentItem: Item {
+                                        Rectangle {
+                                            width: parent.width * (dlBar.value / 100)
+                                            height: parent.height
+                                            radius: 4
+                                            color: AppState.accent
+                                        }
                                     }
                                 }
                                 Label {
@@ -975,7 +1003,16 @@ Window {
                                     function onDownloadProgress(received, total) {
                                         updateButton.updState = "downloading"
                                         const pct = total > 0 ? Math.round(received / total * 100) : 0
-                                        updateLabel.text = "Downloading update… " + pct + "%"
+                                        dlBar.dlPct = pct
+                                        const got = (received / 1048576).toFixed(1) + " MB"
+                                        updateLabel.text = total > 0
+                                            ? "Downloading… " + pct + "%  (" + got + " / " + (total / 1048576).toFixed(1) + " MB)"
+                                            : "Downloading… " + got
+                                    }
+                                    function onInstallStarted() {
+                                        updateButton.updState = "installing"
+                                        dlBar.dlPct = 100
+                                        updateLabel.text = "Verified — installing, the app will restart…"
                                     }
                                     function onInstallFailed(error) {
                                         updateButton.updState = "idle"
