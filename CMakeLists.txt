@@ -65,8 +65,15 @@ if(WIN32)
     # qt_add_executable (not plain add_executable): wires the WIN32
     # entry point correctly under MinGW (else qMain goes undefined).
     qt_add_executable(TotthodharaUpdater WIN32
-        updater/updater.cpp
-        updater/updater.qrc)
+        updater/updater.cpp)
+    # Shared source, shared alias: resources/app.png is ALSO embedded by
+    # the main app as :/resources/app.png, so this target MUST use the
+    # same alias — Qt keys QT_RESOURCE_ALIAS per source file, and a
+    # different alias here would silently re-point the main app's icon.
+    qt_add_resources(TotthodharaUpdater "updater_icons"
+        PREFIX "/"
+        FILES resources/app.png
+    )
     target_link_libraries(TotthodharaUpdater PRIVATE Qt6::Widgets)
 endif()
 if(WIN32)
@@ -109,6 +116,7 @@ qt_add_qml_module(Totthodhara
 
 qt_add_resources(Totthodhara "app_resources"
     PREFIX "/"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}"
     FILES resources/app.png
 )
 

@@ -80,9 +80,9 @@ public:
         , m_zip(zip)
     {
         setWindowTitle(QStringLiteral("Totthodhara Update"));
-        setWindowIcon(QIcon(QStringLiteral(":/app.png")));
+        setWindowIcon(QIcon(QStringLiteral(":/resources/app.png")));
         setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
-        setFixedSize(470, 225);
+        setFixedSize(470, 265);
         // Settings-window look: near-black card, white text, blue accent.
         setStyleSheet(QStringLiteral(
             "QWidget { background-color: #202020; color: #ffffff; font-size: 12px; }"
@@ -93,42 +93,35 @@ public:
             "QProgressBar::chunk { background-color: #4cc2ff; border-radius: 5px; }"));
 
         auto *lay = new QVBoxLayout(this);
-        lay->setContentsMargins(18, 14, 18, 14);
+        lay->setContentsMargins(22, 16, 22, 16);
         lay->setSpacing(8);
 
-        // Header: app icon + titles, like the Settings caption bar.
-        auto *head = new QWidget(this);
-        auto *headLay = new QHBoxLayout(head);
-        headLay->setContentsMargins(0, 0, 0, 0);
-        headLay->setSpacing(12);
-        auto *icon = new QLabel(head);
-        icon->setPixmap(QPixmap(QStringLiteral(":/app.png"))
-                            .scaled(44, 44, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-        icon->setFixedSize(44, 44);
-        headLay->addWidget(icon);
-        auto *titles = new QWidget(head);
-        auto *titleLay = new QVBoxLayout(titles);
-        titleLay->setContentsMargins(0, 0, 0, 0);
-        titleLay->setSpacing(2);
-        auto *name = new QLabel(tr("Totthodhara Update"), titles);
+        // Centered header: app icon, titles, status — About-page style.
+        auto *icon = new QLabel(this);
+        icon->setPixmap(QPixmap(QStringLiteral(":/resources/app.png"))
+                            .scaled(56, 56, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        icon->setFixedSize(56, 56);
+        lay->addWidget(icon, 0, Qt::AlignHCenter);
+        auto *name = new QLabel(tr("Totthodhara Update"), this);
         QFont nf = name->font();
         nf.setBold(true);
-        nf.setPixelSize(14);
+        nf.setPixelSize(15);
         name->setFont(nf);
-        titleLay->addWidget(name);
+        name->setAlignment(Qt::AlignHCenter);
+        lay->addWidget(name);
         auto *sub = new QLabel(tr("Updating to %1 — clips and settings are kept.").arg(version),
-                               titles);
+                               this);
         sub->setProperty("muted", true);
         sub->setWordWrap(true);
-        titleLay->addWidget(sub);
-        headLay->addWidget(titles, 1);
-        lay->addWidget(head);
+        sub->setAlignment(Qt::AlignHCenter);
+        lay->addWidget(sub);
 
         m_status = new QLabel(tr("Starting…"), this);
         QFont f = m_status->font();
         f.setBold(true);
         f.setPixelSize(13);
         m_status->setFont(f);
+        m_status->setAlignment(Qt::AlignHCenter);
         lay->addWidget(m_status);
 
         // Full-width bar, centered by the layout itself.
@@ -142,6 +135,7 @@ public:
         m_detail = new QLabel(this);
         m_detail->setProperty("muted", true);
         m_detail->setWordWrap(false);
+        m_detail->setAlignment(Qt::AlignHCenter);
         lay->addWidget(m_detail);
         lay->addStretch(1);
     }

@@ -899,8 +899,8 @@ Window {
                                 }
                                 Image {
                                     Layout.alignment: Qt.AlignHCenter
-                                    Layout.preferredWidth: 72
-                                    Layout.preferredHeight: 72
+                                    Layout.preferredWidth: 88
+                                    Layout.preferredHeight: 88
                                     source: "qrc:/resources/app.png"
                                 }
                                 Label {
