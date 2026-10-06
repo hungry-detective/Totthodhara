@@ -62,8 +62,11 @@ if(WIN32)
     # Self-updater window (portable installs): runs from the temp stage
     # while it swaps stub+library, so the main app never needs a console.
     # No Q_OBJECT in updater.cpp (lambdas only) — no MOC run needed.
-    add_executable(TotthodharaUpdater WIN32
-        updater/updater.cpp)
+    # qt_add_executable (not plain add_executable): wires the WIN32
+    # entry point correctly under MinGW (else qMain goes undefined).
+    qt_add_executable(TotthodharaUpdater WIN32
+        updater/updater.cpp
+        updater/updater.qrc)
     target_link_libraries(TotthodharaUpdater PRIVATE Qt6::Widgets)
 endif()
 if(WIN32)

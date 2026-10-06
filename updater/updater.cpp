@@ -8,13 +8,19 @@
 // up after itself, then exits. Exit 0 ok, 1 failed (old install relaunched
 // when still intact).
 //
+// Look matches the Settings window: near-black card, white text, blue
+// accent progress. App icon is embedded (updater.qrc) so the title bar and
+// taskbar wear it even from the temp stage.
+//
 // No Q_OBJECT here on purpose (lambdas only): this file needs no MOC run.
 #include <QApplication>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QIcon>
 #include <QLabel>
+#include <QPixmap>
 #include <QProcess>
 #include <QProgressBar>
 #include <QTextStream>
@@ -74,16 +80,49 @@ public:
         , m_zip(zip)
     {
         setWindowTitle(QStringLiteral("Totthodhara Update"));
+        setWindowIcon(QIcon(QStringLiteral(":/app.png")));
         setWindowFlags(windowFlags() | Qt::WindowStaysOnTopHint);
-        setFixedSize(430, 190);
+        setFixedSize(470, 225);
+        // Settings-window look: near-black card, white text, blue accent.
+        setStyleSheet(QStringLiteral(
+            "QWidget { background-color: #202020; color: #ffffff; font-size: 12px; }"
+            "QLabel[muted=\"true\"] { color: #a0a0a0; }"
+            "QProgressBar { background-color: #2d2d2d; border: none;"
+            " border-radius: 5px; min-height: 10px; max-height: 10px;"
+            " text-align: center; color: #ffffff; font-size: 11px; }"
+            "QProgressBar::chunk { background-color: #4cc2ff; border-radius: 5px; }"));
 
         auto *lay = new QVBoxLayout(this);
         lay->setContentsMargins(18, 14, 18, 14);
         lay->setSpacing(8);
 
-        m_title = new QLabel(tr("Updating to %1 — clips and settings are kept.").arg(version), this);
-        m_title->setWordWrap(true);
-        lay->addWidget(m_title);
+        // Header: app icon + titles, like the Settings caption bar.
+        auto *head = new QWidget(this);
+        auto *headLay = new QHBoxLayout(head);
+        headLay->setContentsMargins(0, 0, 0, 0);
+        headLay->setSpacing(12);
+        auto *icon = new QLabel(head);
+        icon->setPixmap(QPixmap(QStringLiteral(":/app.png"))
+                            .scaled(44, 44, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        icon->setFixedSize(44, 44);
+        headLay->addWidget(icon);
+        auto *titles = new QWidget(head);
+        auto *titleLay = new QVBoxLayout(titles);
+        titleLay->setContentsMargins(0, 0, 0, 0);
+        titleLay->setSpacing(2);
+        auto *name = new QLabel(tr("Totthodhara Update"), titles);
+        QFont nf = name->font();
+        nf.setBold(true);
+        nf.setPixelSize(14);
+        name->setFont(nf);
+        titleLay->addWidget(name);
+        auto *sub = new QLabel(tr("Updating to %1 — clips and settings are kept.").arg(version),
+                               titles);
+        sub->setProperty("muted", true);
+        sub->setWordWrap(true);
+        titleLay->addWidget(sub);
+        headLay->addWidget(titles, 1);
+        lay->addWidget(head);
 
         m_status = new QLabel(tr("Starting…"), this);
         QFont f = m_status->font();
@@ -92,13 +131,16 @@ public:
         m_status->setFont(f);
         lay->addWidget(m_status);
 
+        // Full-width bar, centered by the layout itself.
         m_bar = new QProgressBar(this);
         m_bar->setRange(0, 100);
         m_bar->setValue(0);
         m_bar->setTextVisible(true);
+        m_bar->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         lay->addWidget(m_bar);
 
         m_detail = new QLabel(this);
+        m_detail->setProperty("muted", true);
         m_detail->setWordWrap(false);
         lay->addWidget(m_detail);
         lay->addStretch(1);
@@ -124,6 +166,7 @@ private:
         m_status->setText(text);
         m_base = base;
         m_span = span;
+        m_bar->setRange(0, 100);
         m_bar->setValue(base);
         QApplication::processEvents();
     }
@@ -173,13 +216,24 @@ private:
     void stepUnpack()
     {
         setStep(tr("Unpacking the new version…"), 5, 20);
-        m_bar->setRange(0, 0); // busy: Expand-Archive gives no progress
+        // Expand-Archive reports no progress: breathe the bar 5→25 while
+        // it works so a big zip never reads as stuck.
+        m_pulse = 0;
+        auto *pulse = new QTimer(this);
+        connect(pulse, &QTimer::timeout, this, [this, pulse] {
+            if (!pulse->isActive())
+                return;
+            m_pulse = (m_pulse + 4) % 20;
+            m_bar->setValue(5 + m_pulse);
+        });
+        pulse->start(150);
         auto *p = new QProcess(this);
         connect(p,
                 QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this, [this, p](int code, QProcess::ExitStatus) {
+                this, [this, p, pulse](int code, QProcess::ExitStatus) {
+                    pulse->stop();
+                    pulse->deleteLater();
                     p->deleteLater();
-                    m_bar->setRange(0, 100);
                     if (code != 0) {
                         fail(tr("Could not unpack the download."));
                         return;
@@ -214,10 +268,14 @@ private:
         const QStringList dirs = collectDirs(m_root, QStringLiteral("data"));
         const int total = files.size() + dirs.size();
         int i = 0;
-        for (const QString &fp : files)
-            QFile::remove(fp), setProgress(++i, total);
-        for (const QString &dp : dirs)
-            QDir().rmdir(dp), setProgress(++i, total);
+        for (const QString &fp : files) {
+            QFile::remove(fp);
+            setProgress(++i, total);
+        }
+        for (const QString &dp : dirs) {
+            QDir().rmdir(dp);
+            setProgress(++i, total);
+        }
         // Root-level files (the old stub).
         QDir rootDir(m_root);
         for (const QString &fn :
@@ -294,6 +352,7 @@ private:
     int m_base = 0;
     int m_span = 0;
     int m_ticks = 0;
+    int m_pulse = 0;
 };
 
 int main(int argc, char *argv[])
