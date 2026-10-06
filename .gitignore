@@ -4,6 +4,7 @@ build-release/
 # Portable output (rebuilt by package.cmd; ~100MB+)
 deploy/
 *.zip
+*.sha256
 # Local run data (history.db, clips, settings INI)
 data/
 # Logs
