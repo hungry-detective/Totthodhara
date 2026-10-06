@@ -1,0 +1,985 @@
+<Window x:Class="ClipDropPro.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+        xmlns:conv="clr-namespace:ClipDropPro.Converters"
+        Title="Totthodhara Settings" Height="540" Width="540"
+        Icon="pack://application:,,,/app.png"
+        Background="{DynamicResource WindowBg}" Foreground="{DynamicResource TextColor}" 
+        WindowStyle="None" AllowsTransparency="False"
+        WindowStartupLocation="CenterScreen"
+        BorderThickness="1" BorderBrush="{DynamicResource BorderColor}"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        RenderOptions.ClearTypeHint="Enabled">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome GlassFrameThickness="0" CornerRadius="8" CaptionHeight="40" ResizeBorderThickness="4"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:StringEqualityToVisibilityConverter x:Key="StringEqualityToVisibilityConverter"/>
+        <conv:StringEqualityToBoolConverter x:Key="StringEqualityToBoolConverter"/>
+
+        <!-- Section Tab Style -->
+        <Style x:Key="SectionTabStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderThickness="0">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource CardBg}"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
+                                <Setter TargetName="Border" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- RadioContentControl Style for Top/Bottom toggle -->
+        <Style TargetType="RadioButton" x:Key="RadioContentStyle">
+            <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="MinWidth" Value="60"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Border" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}">
+                            <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource AccentColor}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ToggleSwitch Style -->
+        <Style x:Key="ToggleSwitchStyle" TargetType="CheckBox">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid Background="Transparent">
+                            <Border x:Name="BackgroundBorder" Width="40" Height="20" Background="{DynamicResource ControlBg}" CornerRadius="10" VerticalAlignment="Center"/>
+                            <Ellipse x:Name="Dot" Width="14" Height="14" Fill="White" HorizontalAlignment="Left" Margin="3" VerticalAlignment="Center">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform X="0"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="BackgroundBorder" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="20" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Dot" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.1"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BackgroundBorder" Property="BorderBrush" Value="#666"/>
+                                <Setter TargetName="BackgroundBorder" Property="BorderThickness" Value="1"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Setting Card Style -->
+        <Style x:Key="SettingCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource CardBg}"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+        </Style>
+
+        <!-- Modern ScrollBar Style -->
+        <Style TargetType="ScrollBar">
+            <Setter Property="Width" Value="6"/>
+            <Setter Property="MinWidth" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Grid x:Name="Bg" Background="{TemplateBinding Background}" SnapsToDevicePixels="true">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true">
+                                <Track.Thumb>
+                                    <Thumb x:Name="Thumb">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Border x:Name="ThumbBorder" CornerRadius="3" Background="{DynamicResource ControlBg}" Margin="1,0"/>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="true">
+                                                        <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource BorderColor}"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Ultimate Windows 11 ComboBox Style -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource ControlBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <Border x:Name="MainBorder" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                    BorderThickness="{TemplateBinding BorderThickness}" 
+                                    CornerRadius="6"/>
+                            
+                            <Grid Margin="{TemplateBinding Padding}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <ContentPresenter x:Name="ContentSite"
+                                                   Grid.Column="0"
+                                                   IsHitTestVisible="False"
+                                                   Content="{TemplateBinding SelectionBoxItem}"
+                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                   ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Left"/>
+
+                                <TextBox x:Name="PART_EditableTextBox"
+                                          Grid.Column="0"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          CaretBrush="{TemplateBinding Foreground}"
+                                          VerticalAlignment="Center"
+                                          Margin="0"
+                                          Padding="0"
+                                          Visibility="Collapsed"
+                                          Focusable="True"
+                                          IsReadOnly="{TemplateBinding IsReadOnly}"/>
+
+                                <TextBlock Grid.Column="1" 
+                                           Text="&#xE70D;" 
+                                           FontFamily="Segoe MDL2 Assets" 
+                                           FontSize="10" 
+                                           VerticalAlignment="Center" 
+                                           Margin="10,0,0,0"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                            </Grid>
+
+                            <ToggleButton x:Name="ToggleButton"
+                                          Grid.Column="1"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          Opacity="0"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent"/>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="Popup" 
+                                   Placement="Bottom" 
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" 
+                                   AllowsTransparency="True" 
+                                   Focusable="False" 
+                                   PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" 
+                                      SnapsToDevicePixels="True" 
+                                      MinWidth="{TemplateBinding ActualWidth}" 
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder" 
+                                            Background="{DynamicResource MenuBg}" 
+                                            BorderThickness="1" 
+                                            BorderBrush="{DynamicResource BorderColor}" 
+                                            CornerRadius="8" 
+                                            Margin="0,4,0,4">
+                                        <Border.Effect>
+                                            <DropShadowEffect BlurRadius="10" Color="Black" Opacity="0.2" ShadowDepth="2"/>
+                                        </Border.Effect>
+                                        <ScrollViewer Margin="4" SnapsToDevicePixels="True" Background="Transparent">
+                                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="MainBorder" Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsEditable" Value="False">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Collapsed"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Margin="4,2">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="4" Margin="4,2">
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentColor}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="1">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Title Bar -->
+            <RowDefinition Height="Auto"/> <!-- Section Nav -->
+            <RowDefinition Height="*"/>    <!-- Content -->
+        </Grid.RowDefinitions>
+
+        <!-- Custom Title Bar -->
+        <Grid Grid.Row="0" Height="40" Background="{DynamicResource WindowBg}">
+            <TextBlock Text="Totthodhara Settings" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+            <Button x:Name="BtnClose" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" 
+                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource IconColor}" 
+                    Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                    Click="CloseButton_Click" WindowChrome.IsHitTestVisibleInChrome="True"
+                    Panel.ZIndex="100" Padding="10,8"/>
+        </Grid>
+
+        <!-- Section Navigation -->
+        <Border Grid.Row="1" Background="{DynamicResource WindowBg}" Padding="16,8,16,0">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Content="Appearance" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Appearance}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Appearance"/>
+                <RadioButton Content="Behavior" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Behavior}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Behavior"/>
+                <RadioButton Content="Storage" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=Storage}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="Storage"/>
+                <RadioButton Content="About" IsChecked="{Binding CurrentSection, Converter={StaticResource StringEqualityToBoolConverter}, ConverterParameter=About}"
+                             Style="{StaticResource SectionTabStyle}" Command="{Binding NavigateCommand}" CommandParameter="About"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Appearance Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Appearance}">
+            <StackPanel>
+                <TextBlock Text="Appearance" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <!-- App Theme -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="App Mode" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Select which app theme to display" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="2" Width="120" VerticalAlignment="Center"
+                                  ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"
+                                  SelectionChanged="ThemeComboBox_SelectionChanged"/>
+                    </Grid>
+                </Border>
+
+                <!-- Transparency effect -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7F7;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Transparency effect" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Enable Windows 11 acrylic glass effect in Light or Dark mode" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding TransparencyEffect}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Follow Windows translucency (System mode) -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Follow Windows translucency" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="In System mode, enable the effect automatically when Windows has transparency on" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding FollowSystemTransparency}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Rounded Corners -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Rounded corners" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Keep capsule shelf rounded in any mode" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding RoundedCorners}" VerticalAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Bar Size -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE739;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Bar size" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Change the thickness of the shelf bar" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center"
+                                  ItemsSource="{Binding BarSizes}" SelectedItem="{Binding BarSize}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Shelf Position -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8F0;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Shelf position" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Dock the shelf to top or bottom of screen" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <RadioButton Content="Top" IsChecked="{Binding IsTopChecked}" Style="{StaticResource RadioContentStyle}" Margin="0,0,4,0"/>
+                            <RadioButton Content="Bottom" IsChecked="{Binding IsBottomChecked}" Style="{StaticResource RadioContentStyle}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Alignment -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8A1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Alignment" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="How items are aligned in the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="2" Width="110" VerticalAlignment="Center"
+                                  ItemsSource="{Binding Alignments}" SelectedItem="{Binding Alignment}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Network Speed + Speed on left -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE968;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="Network speed" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Show upload/download speed on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowNetworkMonitor}"/>
+                        </Grid>
+                        <Grid Margin="32,10,0,0" Visibility="{Binding ShowNetworkMonitor, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE752;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                <TextBlock Text="Speed on left" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Move only speed to the left of scroll buttons" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding MonitorsOnLeft}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- CPU & RAM Monitor + Hardware on left -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE963;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="CPU &amp; RAM" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Show processor and memory usage on the shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowCpuRamMonitor}"/>
+                        </Grid>
+                        <Grid Margin="32,10,0,0" Visibility="{Binding ShowCpuRamMonitor, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="20"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE753;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                <TextBlock Text="Hardware on left" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="Move CPU/RAM to the left of scroll buttons" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HardwareOnLeft}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- World Clock -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE121;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="World clock" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Show selected time zone on the shelf (e.g. Arizona MST)" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding ShowWorldClock}"/>
+                    </Grid>
+                </Border>
+                <!-- World Clock Pinned Zones (clean + searchable) -->
+                <Border Style="{StaticResource SettingCardStyle}" Visibility="{Binding ShowWorldClock, Converter={StaticResource BoolToVis}}">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xE775;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                <TextBlock Text="Pinned clocks" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                                <TextBlock Text="{Binding PinnedCountText}" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            </StackPanel>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding WorldClockPinItems}" Margin="32,12,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPinned}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Display}" FontSize="12" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        <CheckBox Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IsPinned}" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBox Margin="32,12,0,0" Padding="8,6" Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                                  Text="{Binding ZoneSearchText, UpdateSourceTrigger=PropertyChanged, Delay=150}" ToolTip="Type to filter — e.g. Tokyo, Dhaka, Arizona">
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+<ControlTemplate TargetType="TextBox">
+                                                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                    <Grid>
+                                                        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                                                        <TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed" Background="Transparent" BorderThickness="0" Foreground="{TemplateBinding Foreground}" CaretBrush="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="0" Padding="0" Focusable="True" IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                                                        <TextBlock Text="Search time zones..." Foreground="{DynamicResource TextColor}" Opacity="0.4" Margin="0,0,0,0" IsHitTestVisible="False" VerticalAlignment="Center">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding Text, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </Grid>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsFocused" Value="True">
+                                                        <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsFocused" Value="False">
+                                                        <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Collapsed"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+                        <Grid Margin="32,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0"
+                                       ItemsSource="{Binding AvailableZonesToAdd}" SelectedItem="{Binding SelectedZoneToAdd}"
+                                       IsEditable="False" IsDropDownOpen="{Binding IsZoneDropdownOpen, Mode=TwoWay}"
+                                       Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"
+                                       Padding="8,4" ToolTip="Filtered time zones — choose then click Add">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Key}" Foreground="{DynamicResource TextColor}" VerticalAlignment="Center"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                                <ComboBox.Style>
+                                    <Style TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasAvailableZones}" Value="False">
+                                                <Setter Property="IsEnabled" Value="False"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ComboBox.Style>
+                            </ComboBox>
+                            <Button Grid.Column="1" Content="Add" Padding="14,6" Command="{Binding AddPinnedZoneCommand}"
+                                     Background="{DynamicResource AccentColor}" Foreground="White" BorderThickness="0" Cursor="Hand">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter TargetName="bd" Property="Opacity" Value="0.4"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="Type above to live-filter — choose from dropdown then click Add to pin" FontSize="11" Foreground="{DynamicResource TextColor}" Opacity="0.5" Margin="32,6,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Behavior Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Behavior}">
+            <StackPanel>
+                <TextBlock Text="Behavior" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <!-- Run at Startup -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7F8;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Run at startup" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically start app when you sign in" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding StartWithWindows}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Hide Clipboard Items -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Hide clipboard items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Hide items, search and multi-paste — compact toolbar-only shelf" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding HideClipboard}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Always on Top -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE718;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Always on top" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Keep the shelf window above other windows" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AlwaysOnTop}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Copy to Destination -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Copy items to destination" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Auto-copy text and files when clicking items" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding CopyItemsToDestination}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Tray Icon Action -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Tray icon action" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Choose what happens on double-click" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <ComboBox Grid.Column="2" Width="140" VerticalAlignment="Center"
+                                  ItemsSource="{Binding TrayIconActions}" SelectedItem="{Binding TrayIconAction}"
+                                  Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Include DIB in image drag -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE8B6;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Include DIB in image drag" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Off = cleaner drag (File + Bitmap). On = also sends DIB for apps like WhatsApp, but may confuse opencode and some chat apps." FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6" TextWrapping="Wrap" MaxWidth="420"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding IncludeDIBInDrag}"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Storage Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=Storage}">
+            <StackPanel>
+                <TextBlock Text="Storage" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <!-- Auto-clean -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Auto-clean old items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically remove clips older than specified hours" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBox Text="{Binding AutoCleanHours}" Width="60" TextAlignment="Center"
+                                     Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                            <TextBlock Text="hours" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Max file size -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE7B3;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Max file size" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Skip files larger than this size (0 = no limit)" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBox Text="{Binding MaxFileSizeMB}" Width="60" TextAlignment="Center"
+                                     Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                            <TextBlock Text="MB" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Max history items -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE743;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Max history items" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Maximum items to keep in history (pinned &amp; snippets excluded)" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBox Text="{Binding MaxHistoryItems}" Width="60" TextAlignment="Center"
+                                     Background="{DynamicResource ControlBg}" Foreground="{DynamicResource TextColor}" BorderBrush="{DynamicResource BorderColor}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- About Section -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16" Visibility="{Binding CurrentSection, Converter={StaticResource StringEqualityToVisibilityConverter}, ConverterParameter=About}">
+            <StackPanel>
+                <TextBlock Text="About" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,16" Foreground="{DynamicResource TextColor}"/>
+
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Width="32" Height="32" ClipToBounds="True" CornerRadius="4" VerticalAlignment="Center">
+                            <Image Source="pack://application:,,,/app.png" Width="32" Height="32" RenderOptions.BitmapScalingMode="HighQuality" Stretch="Uniform"/>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Totthodhara" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock x:Name="VersionText" Text="Version 1.1.0" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                            <TextBlock Text="Modern clipboard manager with floating UI" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Check for updates -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE895;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Check for updates" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Check if a newer version is available on GitHub" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="Check" Click="CheckForUpdatesSettings_Click" Padding="16,6"
+                                Background="{DynamicResource AccentColor}" Foreground="White" BorderThickness="0"
+                                FontSize="13" FontWeight="SemiBold" Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Auto check when app runs -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Auto check when app runs" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Automatically check for updates when the app runs" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding AutoCheckUpdates}"/>
+                    </Grid>
+                </Border>
+
+                <!-- Silent auto-update -->
+                <Border Style="{StaticResource SettingCardStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xEA94;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Silent auto-update" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="Download and prepare updates in background without prompts" FontSize="12" Foreground="{DynamicResource TextColor}" Opacity="0.6"/>
+                        </StackPanel>
+                        <CheckBox Grid.Column="2" Style="{StaticResource ToggleSwitchStyle}" IsChecked="{Binding SilentAutoUpdate}"/>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource SettingCardStyle}" MouseLeftButtonUp="GitHubLink_Click" Cursor="Hand">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource IconColor}"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="Source code" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource TextColor}"/>
+                            <TextBlock Text="github.com/hungry-detective/Totthodhara" FontSize="12" Foreground="{DynamicResource AccentColor}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

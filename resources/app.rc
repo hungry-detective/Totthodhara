@@ -1,0 +1,2 @@
+// Windows app icon (taskbar, Alt+Tab, Explorer). Built from app.png.
+IDI_ICON1 ICON "app.ico"
