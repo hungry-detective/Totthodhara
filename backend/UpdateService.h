@@ -52,7 +52,10 @@ private:
     static int compareVersions(const QString &have, const QString &tag);
     // Writes apply.cmd into the stage dir and launches it detached.
     // Returns false (with installFailed emitted) when staging fails.
+    // Legacy path for 0.2.0 installs (predates the updater window).
     bool stageAndLaunch(const QString &zipPath);
+    bool stageWithScript(const QString &zipPath, const QString &root,
+                         const QString &stage);
     // 1-hour result cache (data/update_cache/last_check.json): answers
     // repeat checks without burning the anonymous GitHub rate limit.
     static QString cacheFile();

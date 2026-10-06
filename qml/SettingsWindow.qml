@@ -881,7 +881,7 @@ Window {
                             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOff }
                             ColumnLayout {
                                 width: settings.colWidth
-                                spacing: 12
+                                spacing: 10
                                 Label {
                                     text: "ABOUT"
                                     color: AppState.muted
@@ -892,8 +892,8 @@ Window {
                                 Image {
                                     Layout.alignment: Qt.AlignHCenter
                                     source: "qrc:/resources/app.png"
-                                    width: 64
-                                    height: 64
+                                    width: 48
+                                    height: 48
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
@@ -904,9 +904,12 @@ Window {
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: "Version " + Qt.application.version
-                                    color: AppState.muted
+                                    text: updateButton.updLatest === ""
+                                        ? "Version " + Qt.application.version
+                                        : "Version " + Qt.application.version + "  •  latest " + updateButton.updLatest
+                                    color: AppState.text
                                     font.pixelSize: 12
+                                    font.bold: true
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
@@ -916,43 +919,74 @@ Window {
                                     horizontalAlignment: Text.AlignHCenter
                                     wrapMode: Text.WordWrap
                                 }
-                                Button {
-                                    id: updateButton
+                                RowLayout {
                                     Layout.alignment: Qt.AlignHCenter
-                                    property string updState: "idle"
-                                    property string updVersion: ""
-                                    text: updState === "checking" ? "Checking…"
-                                        : updState === "available" ? "Download " + updVersion + " & restart"
-                                        : updState === "downloading" ? updateLabel.text
-                                        : updState === "installing" ? "Installing…"
-                                        : "Check for updates"
-                                    enabled: (updState === "idle" || updState === "available") && !Updater.busy
-                                    onClicked: {
-                                        if (updState === "available")
-                                            Updater.downloadAndInstall()
-                                        else {
-                                            updateButton.updState = "checking"
-                                            Updater.checkForUpdates()
+                                    spacing: 10
+                                    // Plain tap-rectangle (NOT a Button): same look,
+                                    // wired through TapHandler like every other
+                                    // working control in this app.
+                                    Rectangle {
+                                        id: updateButton
+                                        property string updState: "idle"
+                                        property string updVersion: ""
+                                        property string updLatest: ""
+                                        property string updNote: ""
+                                        Layout.preferredWidth: 210
+                                        Layout.preferredHeight: 34
+                                        radius: 8
+                                        enabled: (updState === "idle" || updState === "available") && !Updater.busy
+                                        // Disabled reads disabled (a live-looking dead
+                                        // button was reported as "nothing happens").
+                                        opacity: enabled ? 1 : 0.45
+                                        color: tap.pressed ? Qt.darker(AppState.accent, 1.15)
+                                            : tapHover.hovered && enabled ? Qt.lighter(AppState.accent, 1.1) : AppState.accent
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: updateButton.updState === "checking" ? "Checking…"
+                                                : updateButton.updState === "available" ? "Download " + updateButton.updVersion + " & restart"
+                                                : updateButton.updState === "downloading" ? "Downloading…"
+                                                : updateButton.updState === "installing" ? "Installing…"
+                                                : "Check for updates"
+                                            font.bold: true
+                                            font.pixelSize: 13
+                                            color: "white"
+                                        }
+                                        HoverHandler { id: tapHover }
+                                        TapHandler {
+                                            id: tap
+                                            enabled: updateButton.enabled
+                                            onTapped: {
+                                                if (updateButton.updState === "available")
+                                                    Updater.downloadAndInstall()
+                                                else {
+                                                    updateButton.updState = "checking"
+                                                    Updater.checkForUpdates()
+                                                }
+                                            }
                                         }
                                     }
-                                    background: Rectangle {
-                                        implicitWidth: 210
-                                        implicitHeight: 34
-                                        radius: 8
-                                        color: parent.hovered || parent.pressed ? Qt.lighter(AppState.accent, 1.1) : AppState.accent
-                                    }
-                                    contentItem: Label {
-                                        text: parent.text
-                                        font.bold: true
-                                        font.pixelSize: 13
-                                        color: "white"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
+                                    // Checking pulse: visible motion while the
+                                    // check is in flight, so a tap always answers.
+                                    Rectangle {
+                                        Layout.preferredWidth: 12
+                                        Layout.preferredHeight: 12
+                                        Layout.alignment: Qt.AlignVCenter
+                                        radius: 6
+                                        color: AppState.accent
+                                        visible: updateButton.updState === "checking"
+                                        opacity: 0.3
+                                        SequentialAnimation on opacity {
+                                            running: updateButton.updState === "checking"
+                                            loops: Animation.Infinite
+                                            NumberAnimation { to: 1; duration: 350 }
+                                            NumberAnimation { to: 0.3; duration: 350 }
+                                        }
                                     }
                                 }
                                 ProgressBar {
                                     id: dlBar
                                     Layout.alignment: Qt.AlignHCenter
+                                    Layout.preferredWidth: 260
                                     implicitWidth: 260
                                     visible: updateButton.updState === "downloading"
                                         || updateButton.updState === "installing"
@@ -979,6 +1013,7 @@ Window {
                                     id: updateLabel
                                     Layout.alignment: Qt.AlignHCenter
                                     Layout.preferredWidth: 420
+                                    text: updateButton.updNote
                                     horizontalAlignment: Text.AlignHCenter
                                     wrapMode: Text.WordWrap
                                     color: AppState.muted
@@ -986,37 +1021,38 @@ Window {
                                 Connections {
                                     target: Updater
                                     function onCheckFinished(available, version, notes) {
+                                        updateButton.updLatest = version
                                         if (available) {
                                             updateButton.updState = "available"
                                             updateButton.updVersion = version
                                             const first = String(notes).split("\n")[0].substring(0, 140)
-                                            updateLabel.text = "New in " + version + (first ? ": " + first : "")
+                                            updateButton.updNote = "New in " + version + (first ? ": " + first : "")
                                         } else {
                                             updateButton.updState = "idle"
-                                            updateLabel.text = "You are up to date."
+                                            updateButton.updNote = "You are up to date."
                                         }
                                     }
                                     function onCheckFailed(error) {
                                         updateButton.updState = "idle"
-                                        updateLabel.text = error
+                                        updateButton.updNote = error
                                     }
                                     function onDownloadProgress(received, total) {
                                         updateButton.updState = "downloading"
                                         const pct = total > 0 ? Math.round(received / total * 100) : 0
                                         dlBar.dlPct = pct
                                         const got = (received / 1048576).toFixed(1) + " MB"
-                                        updateLabel.text = total > 0
+                                        updateButton.updNote = total > 0
                                             ? "Downloading… " + pct + "%  (" + got + " / " + (total / 1048576).toFixed(1) + " MB)"
                                             : "Downloading… " + got
                                     }
                                     function onInstallStarted() {
                                         updateButton.updState = "installing"
                                         dlBar.dlPct = 100
-                                        updateLabel.text = "Verified — installing, the app will restart…"
+                                        updateButton.updNote = "Verified — installing, the app will restart…"
                                     }
                                     function onInstallFailed(error) {
                                         updateButton.updState = "idle"
-                                        updateLabel.text = error
+                                        updateButton.updNote = error
                                     }
                                 }
                             }

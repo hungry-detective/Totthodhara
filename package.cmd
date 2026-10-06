@@ -65,6 +65,12 @@ rem --- Launcher stub becomes the root exe friends double-click ---
 copy /B /Y "build-release\TotthodharaLauncher.exe" "deploy\Totthodhara.exe"
 if %errorlevel% neq 0 exit /b %errorlevel%
 
+rem --- Self-updater window rides in library/ (copied to temp at update time) ---
+copy /B /Y "build-release\TotthodharaUpdater.exe" "deploy\library\TotthodharaUpdater.exe"
+if %errorlevel% neq 0 exit /b %errorlevel%
+windeployqt --dir deploy\library --release --compiler-runtime deploy\library\TotthodharaUpdater.exe
+if %errorlevel% neq 0 exit /b %errorlevel%
+
 rem --- Release zip for GitHub Releases (exe + library, NEVER data) ---
 powershell -NoProfile -Command "Compress-Archive -Force -Path 'deploy\Totthodhara.exe','deploy\library' -DestinationPath 'Totthodhara-windows-portable.zip'"
 if %errorlevel% neq 0 exit /b %errorlevel%

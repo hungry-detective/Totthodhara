@@ -97,11 +97,18 @@ cmake --build build
   module dir next to it — engine can't resolve `Main` from resources alone,
   verified failure). Windows loads DLLs only from beside the exe, so the
   stub split is structural, not cosmetic - never flatten Qt DLLs to root.
-  In-app updater (`UpdateService::stageAndLaunch`) generates `apply.cmd`:
-  assert staged `new\library\Totthodhara.exe` + root stub exist BEFORE
-  wiping, check `xcopy`, relaunch the install on ANY failure path (the app
-  already quit). Asset match is the exact portable zip name - never fuzzy,
-  or foreign release assets cross-install and brick portable installs.
+  In-app updater (`UpdateService::stageAndLaunch`): copies
+  `library/TotthodharaUpdater.exe` to the temp stage and launches it with
+  `--root/--zip/--version` — the updater window (updater/updater.cpp, Qt
+  Widgets, runs from stage/ never from the tree it wipes) narrates
+  wait/unpack/verify/wipe/copy with a real progress bar, then relaunches
+  the stub and cleans itself up. 0.2.0 installs predate the updater exe,
+  so they fall back to the generated `apply.cmd` script path (same guards).
+  Either way: assert staged `new\library\Totthodhara.exe` + root stub exist
+  BEFORE wiping, check `xcopy`, relaunch the install on ANY failure path
+  (the app already quit). Asset match is the exact portable zip name -
+  never fuzzy, or foreign release assets cross-install and brick portable
+  installs. `package.cmd` ships the updater exe into `deploy/library/`.
 - `--settings` startup flag: evaluated in C++ into the `openSettingsOnStart`
   context property (the QML-side `Qt.application.arguments` check proved
   unreliable), and the actual open is DEFERRED via a 600ms `settingsOpener`

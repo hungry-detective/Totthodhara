@@ -9,7 +9,7 @@ set(CMAKE_AUTOMOC ON)
 
 # Global Qt install (see environment report). Override per machine with
 # -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/mingw_64
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Sql Widgets)
 
 qt_standard_project_setup()
 
@@ -59,6 +59,12 @@ if(WIN32)
     # Fully static runtime: the stub sits at the portable root where no
     # MinGW DLLs exist (they live in library/, invisible at stub load).
     target_link_options(TotthodharaLauncher PRIVATE -static)
+    # Self-updater window (portable installs): runs from the temp stage
+    # while it swaps stub+library, so the main app never needs a console.
+    # No Q_OBJECT in updater.cpp (lambdas only) — no MOC run needed.
+    add_executable(TotthodharaUpdater WIN32
+        updater/updater.cpp)
+    target_link_libraries(TotthodharaUpdater PRIVATE Qt6::Widgets)
 endif()
 if(WIN32)
     # PDH (CPU counter) + IP Helper API (network octet counters) + DWM

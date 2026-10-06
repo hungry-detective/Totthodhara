@@ -61,10 +61,14 @@ cmake --build build
   the client SHA-256-verifies the zip before installing and refuses
   tampered downloads. Delete superseded old-edition releases so
   `releases/latest` always points at a Qt release.
-* Install flow: download to `%TEMP%/Totthodhara-update`, stage an
-  `apply.cmd` that waits out file locks + mutex, `Expand-Archive`s the
-  zip, replaces everything except `data/` (history.db, clips/, favicons/,
-  settings INI all survive), restarts the stub, deletes the stage.
+* Install flow: download to `%TEMP%/Totthodhara-update`, SHA-256 check,
+  then hand off to the updater window (`library/TotthodharaUpdater.exe`,
+  copied to temp and launched with `--root/--zip/--version`): it waits out
+  file locks + mutex with a live progress bar, `Expand-Archive`s the zip,
+  replaces everything except `data/` (history.db, clips/, favicons/,
+  settings INI all survive), restarts the stub, deletes the stage. 0.2.0
+  installs (no updater exe yet) fall back to the generated `apply.cmd`
+  console script with the same guards.
 * Guards: refuses to run outside the portable layout (dev trees are never
   wiped); needs HTTPS. No signature verification yet — integrity rests on
   HTTPS + GitHub + the SHA-256 check, releases come from your own repo.

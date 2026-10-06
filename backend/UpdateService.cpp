@@ -353,6 +353,27 @@ bool UpdateService::stageAndLaunch(const QString &zipPath)
         return false;
     }
     const QString stage = QFileInfo(zipPath).absolutePath();
+    // Since 0.3.0 the updater window ships in library/: it runs from the
+    // temp stage (never from the tree it wipes) with its own progress GUI.
+    // 0.2.0 installs predate it, so they fall back to the script below.
+    const QString updaterSrc = root + QStringLiteral("/library/TotthodharaUpdater.exe");
+    const QString updaterDst = stage + QStringLiteral("/TotthodharaUpdater.exe");
+    if (QFile::exists(updaterSrc)) {
+        QFile::remove(updaterDst);
+        if (QFile::copy(updaterSrc, updaterDst)
+            && QProcess::startDetached(
+                   updaterDst,
+                   {QStringLiteral("--root"), root, QStringLiteral("--zip"), zipPath,
+                    QStringLiteral("--version"), m_pendingVersion}))
+            return true;
+        // Copy/launch hiccup: fall through to the script path.
+    }
+    return stageWithScript(zipPath, root, stage);
+}
+
+bool UpdateService::stageWithScript(const QString &zipPath, const QString &root,
+                                    const QString &stage)
+{
     const QString script = stage + QStringLiteral("/apply.cmd");
     QFile f(script);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
