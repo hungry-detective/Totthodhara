@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QPointer>
+#include <QTimer>
 
 // In-app updater (portable builds): checks GitHub Releases for a newer
 // windows .zip, downloads it, then hands off to a generated updater script
@@ -76,6 +78,10 @@ private:
 
     QNetworkAccessManager m_net;
     QNetworkReply *m_reply = nullptr;
+    // Stall guard: QNetworkAccessManager has no built-in timeout, and a
+    // hung connection would wedge `busy` (and the Check button) forever.
+    // Rearmed on every downloadProgress; aborts the in-flight reply.
+    QTimer m_stall;
     bool m_busy = false;
     QString m_assetUrl;
     QString m_assetName;

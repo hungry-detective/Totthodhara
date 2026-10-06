@@ -21,6 +21,11 @@
 UpdateService::UpdateService(QObject *parent)
     : QObject(parent)
 {
+    m_stall.setSingleShot(true);
+    connect(&m_stall, &QTimer::timeout, this, [this] {
+        if (m_reply && m_reply->isRunning())
+            m_reply->abort(); // finished() carries the failure below
+    });
 }
 
 void UpdateService::setBusy(bool b)
@@ -113,6 +118,12 @@ void UpdateService::checkForUpdates()
     req.setRawHeader("Accept", "application/vnd.github+json");
     m_reply = m_net.get(req);
     connect(m_reply, &QNetworkReply::finished, this, &UpdateService::onLatestFinished);
+    // 30s ceiling: a stalled handshake must fail loudly, never wedge.
+    QPointer<QNetworkReply> guard(m_reply);
+    QTimer::singleShot(30000, this, [guard] {
+        if (guard && guard->isRunning())
+            guard->abort();
+    });
 }
 
 void UpdateService::onLatestFinished()
@@ -204,10 +215,13 @@ void UpdateService::downloadAndInstall()
     connect(m_reply, &QNetworkReply::downloadProgress,
             this, &UpdateService::onDownloadProgress);
     connect(m_reply, &QNetworkReply::finished, this, &UpdateService::onDownloadFinished);
+    m_stall.start(60000); // rearmed below on every progress signal
 }
 
 void UpdateService::onDownloadProgress(qint64 received, qint64 total)
 {
+    if (received > 0)
+        m_stall.start(60000); // still moving: another 60s grace
     emit downloadProgress(received, total);
 }
 
@@ -215,6 +229,7 @@ void UpdateService::onDownloadFinished()
 {
     QNetworkReply *reply = m_reply;
     m_reply = nullptr;
+    m_stall.stop();
     if (!reply) {
         setBusy(false);
         emit installFailed(tr("Download failed."));
@@ -243,6 +258,7 @@ void UpdateService::onDownloadFinished()
         req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("Totthodhara-Updater"));
         m_reply = m_net.get(req);
         connect(m_reply, &QNetworkReply::finished, this, &UpdateService::onShaFinished);
+        m_stall.start(30000); // tiny file: 30s is plenty
         return;
     }
     proceedInstall();
@@ -252,6 +268,7 @@ void UpdateService::onShaFinished()
 {
     QNetworkReply *reply = m_reply;
     m_reply = nullptr;
+    m_stall.stop();
     if (!reply) {
         setBusy(false);
         emit installFailed(tr("Download failed."));

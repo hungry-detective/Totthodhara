@@ -59,6 +59,14 @@ Window {
         show()
         raise()
         requestActivate()
+        // About always has an answer: silent instant check while empty
+        // (cache-backed, no network when fresh). Busy-gated check calls
+        // simply resolve with the in-flight one — the button dims + pulses
+        // meanwhile, and the 30s/60s network guards always release it.
+        if (updateButton.updNote === "" && updateButton.updState === "idle") {
+            updateButton.updState = "checking"
+            Updater.checkForUpdates()
+        }
     }
 
     // Custom tone picker: any color the user wants.
@@ -891,9 +899,9 @@ Window {
                                 }
                                 Image {
                                     Layout.alignment: Qt.AlignHCenter
+                                    Layout.preferredWidth: 48
+                                    Layout.preferredHeight: 48
                                     source: "qrc:/resources/app.png"
-                                    width: 48
-                                    height: 48
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
