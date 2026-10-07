@@ -1,17 +1,6 @@
 # Totthodhara — Your Clipboard, On a Shelf.
 
-Your clipboard, just bigger!
-
-Totthodhara pins your clipboard history to the taskbar, giving you instant
-access to everything you copied — links, images, files, and important text.
-No more lost links, screenshots, or passwords.
-Save time by copying multiple items at once, no need to switch back and
-forth between apps. Click any card to paste it straight into whatever app
-you are using, or drag it in.
-
-Totthodhara is free and portable: no installer, no account, no cloud. Your
-history lives in a file next to the app, and the shelf follows your Windows
-theme from light to dark.
+Totthodhara keeps everything you copy—text, links, images, and files—right at your fingertips. Copy more, find anything fast, and paste with a click or drag. Free. Portable. Private. No cloud.
 
 ![Totthodhara showcase](docs/showcase.png)
 
