@@ -13,6 +13,8 @@ Totthodhara is free and portable: no installer, no account, no cloud. Your
 history lives in a file next to the app, and the shelf follows your Windows
 theme from light to dark.
 
+![Totthodhara showcase](docs/showcase.png)
+
 ## Download
 
 Grab the latest portable build from
