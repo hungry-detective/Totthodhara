@@ -1,21 +1,55 @@
-# Totthodhara — QML edition (GUI-first)
+# Totthodhara — Never lose a copy again
 
-QML rebuild of the Totthodhara clipboard shelf
-(https://github.com/hungry-detective/Totthodhara).
-**Stage 1 (this folder): the complete GUI with mock data.**
-Stage 2 (later): C++ backend — clipboard hook, SQLite history, global
-hotkeys, AppBar docking — behind the same `ClipStore` contract, QML stays.
+Your clipboard, just bigger!
+
+Totthodhara pins your clipboard history to the taskbar, giving you instant
+access to everything you copied — links, images, files, and important text.
+No more lost links, screenshots, or passwords.
+Save time by copying multiple items at once, no need to switch back and
+forth between apps. Click any card to paste it straight into whatever app
+you are using, or drag it in.
+
+Totthodhara is free and portable: no installer, no account, no cloud. Your
+history lives in a file next to the app, and the shelf follows your Windows
+theme from light to dark.
+
+## Download
+
+Grab the latest portable build from
+[Releases](https://github.com/hungry-detective/Totthodhara/releases/latest):
+unzip anywhere and run `Totthodhara.exe`. Windows 10 / 11.
+
+## Features
+
+- **One-click paste** — click a card and it pastes into your app; the card
+  itself flashes *Pasted!* so you know it landed.
+- **Everything has a card** — text, links with site icons, images with
+  thumbnails, files, colors, mail. Hover any card for a big preview.
+- **Multi-select** — `Shift`+click several cards, then Paste All at once.
+- **Drag out** — drag a card into any app to drop the real file, image,
+  or text.
+- **Pins & snippets** — pin daily essentials, save snippets that always
+  stay on the shelf.
+- **Instant search** — `Ctrl`+`F` filters the whole shelf as you type.
+- **Taskbar meters** — CPU, RAM, network speed, and world clocks ride on
+  the shelf; drag them left or right.
+- **Looks native** — follows the Windows light/dark theme with real
+  taskbar glass, top or bottom edge, three sizes.
+- **Stays updated** — About checks for new releases and installs them
+  with one click, keeping your history and settings.
+
+## For developers
 
 ## Layout
 
 ```
 Totthodhara/
 ├── CMakeLists.txt        Qt 6.8 / MinGW / Ninja build
-├── main.cpp              Minimal entry point (no backend yet)
+├── main.cpp              Minimal entry point, single instance + services
 ├── Main.qml              Floating shelf bar + tray icon
 ├── qml/
 │   ├── AppState.qml      Settings + theme singleton (ViewModel)
-│   ├── ClipStore.qml     Clip list, search, pin/snippet/delete (mock data)
+│   ├── ClipStore.qml     Clip list, search, pin/snippet/delete
 │   ├── ClipCard.qml      One shelf card (+ right-click menu)
 │   ├── SettingRow.qml    Settings card row
 │   └── SettingsWindow.qml Appearance/Behavior/Storage/About
@@ -119,12 +153,10 @@ fill gaps.
   calls in CMakeLists (NOT the builtin rule — its injected `-I` flags break
   on paths with spaces). Two targets must never share one `.o` output.
 
-## Shelf features wired (mock)
+## Shelf behavior (quick reference)
 
-Click = copy/paste toast · Shift+click = multi-select · Paste All ·
-right-click = Pin/Snippet/Delete · Ctrl+F search with live filter ·
+Click = copy back + auto-paste with inline *Pasted!* · `Shift`+click =
+multi-select · Paste All · right-click = Pin/Snippet/Delete ·
+`Ctrl`+click = instant delete · `Ctrl`+`F` search with live filter ·
 gear menu = Clear history / Settings / Exit · tray icon + double-click ·
-draggable frameless bar · Light/Dark + bar size + toggles in Settings.
-
-Not yet real: clipboard capture, SQLite, hotkeys, taskbar AppBar
-docking, live CPU/net stats. These are C++ Stage 2 work.
+top/bottom AppBar dock · Light/Dark/System + bar size in Settings.
