@@ -1,4 +1,4 @@
-# Totthodhara — Never lose a copy again
+# Totthodhara — Your Clipboard, On a Shelf.
 
 Your clipboard, just bigger!
 
