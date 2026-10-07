@@ -57,7 +57,8 @@ Window {
 
     // Full-text preview: sized to hug the content (width and height),
     // so one-liners get a small bubble and long paragraphs get room
-    // (capped well beyond a sentence before eliding).
+    // (capped at 480x420 / 30 lines — novels elide instead of leaving
+    // the screen).
     function showText(txt, centerX, topY) {
         textMode = true
         fileMode = false
@@ -72,10 +73,13 @@ Window {
 
     function placeText() {
         const w = Math.max(120, Math.min(480, bodyTextItem.implicitWidth + 24))
-        // No height cap — show the full text always.
-        const h = Math.max(44, bodyTextItem.contentHeight + 24)
-        preview.width = w
-        preview.height = h
+        const h = Math.min(420, Math.max(44, bodyTextItem.contentHeight + 24))
+        // Guarded writes: unguarded width/height sets re-wrap the text and
+        // re-fire implicit signals (feedback loop that jitters long URLs).
+        if (Math.abs(w - preview.width) > 0.5)
+            preview.width = w
+        if (Math.abs(h - preview.height) > 0.5)
+            preview.height = h
         preview.x = Math.max(8, Math.min(anchorX - w / 2, Screen.width - w - 8))
         preview.y = AppState.shelfPosition === "Top" ? shelfTop + AppState.barHeight + 8 : shelfTop - h - 8
     }
@@ -168,8 +172,10 @@ Window {
             color: "#ececec"
             font.pixelSize: 13
             wrapMode: Text.WrapAnywhere
-            // No elide, no line limit — show the full text always.
-            elide: Text.ElideNone
+            // Capped with elide: novels show 30 lines, never a
+            // taller-than-screen window.
+            maximumLineCount: 30
+            elide: Text.ElideRight
             // Re-hug after layout settles (implicit sizes need one pass).
             // Guarded by textMode: the hidden text item re-wraps whenever
             // the window resizes (e.g. an image preview landing), and an

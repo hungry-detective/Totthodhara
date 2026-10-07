@@ -151,8 +151,17 @@ void SystemMonitorService::tick()
                     // Counters are 32-bit and wrap: mask the delta.
                     // Raw per-second deltas (no smoothing): the number shown
                     // is exactly what moved in the last second.
+                    // A driver reset/nic flap also shows cur < prev — but a
+                    // genuine wrap always happens within one tick of the top
+                    // (traffic under ~8 Gbps/s can't cross more). Anything
+                    // else is a reset: re-baseline and report 0 for the tick
+                    // instead of flashing a gigabyte-scale spike.
                     const auto delta = [](unsigned long long cur, unsigned long long prev) {
-                        return cur >= prev ? cur - prev : (0x100000000ULL - prev) + cur;
+                        if (cur >= prev)
+                            return cur - prev;
+                        if (prev - cur > 0xFFFFFFFFULL - 0x40000000ULL)
+                            return (0x100000000ULL - prev) + cur;
+                        return 0ULL;
                     };
                     formatPair(double(delta(outBytes, m_prevOut)) / seconds,
                                double(delta(inBytes, m_prevIn)) / seconds,
@@ -228,6 +237,10 @@ QString SystemMonitorService::zoneTag(const QString &zone)
         if (z == QLatin1String(e.first))
             return QString::fromLatin1(e.second);
     }
+    // Unknown id: validate before guessing — an invalid zone shows UTC
+    // time, so the tag must read UTC too, never a mislabel like "FOO".
+    if (!z.isEmpty() && !QTimeZone(z.toLatin1()).isValid())
+        return QStringLiteral("UTC");
     // Fallback: city part, first 3 letters ("New_York" -> "NEW").
     const QString city = zone.section(QLatin1Char('/'), -1).replace(QLatin1Char('_'), QLatin1Char(' '));
     return city.left(3).toUpper();

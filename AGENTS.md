@@ -36,7 +36,7 @@ Never port WPF behavior blindly; the QML app below is the source of truth.
   setDefaultFormat+setPath — never the registry, so the folder stays portable).
 - Logs (only if `C:/Temp` exists): `tott_startup.log`, `clip.log`.
 - Factory defaults mirror a real user setup (System/Medium/Bottom/Center,
-  rounded, transparent bar 0.85, tint pills, borderless thumbs, always-on-top,
+  rounded, transparent bar 0.80, tint pills, borderless thumbs, always-on-top,
   auto-paste, hw left + net right + clock left in "clock,hw,net" order,
   world clock ON with Phoenix + Local Clock-two off, 50 items / 25 MB /
   2 h cleaning). Defaults live TWICE and must match: `AppState.qml` (first
@@ -98,12 +98,19 @@ cmake --build build
   verified failure). Windows loads DLLs only from beside the exe, so the
   stub split is structural, not cosmetic - never flatten Qt DLLs to root.
   In-app updater (`UpdateService::stageAndLaunch`): copies
-  `library/TotthodharaUpdater.exe` to the temp stage and launches it with
+  `library/TotthodharaUpdater.exe` to the temp stage and launches it via a
+  generated `run.cmd` (sets PATH + QT_PLUGIN_PATH to the install's
+  `library/` — the updater's Qt DLLs are invisible from TEMP, and a bare
+  launch dies with 0xc0000135 on Qt-less machines) with
   `--root/--zip/--version` — the updater window (updater/updater.cpp, Qt
   Widgets, runs from stage/ never from the tree it wipes) narrates
-  wait/unpack/verify/wipe/copy with a real progress bar, then relaunches
-  the stub and cleans itself up. 0.2.0 installs predate the updater exe,
-  so they fall back to the generated `apply.cmd` script path (same guards).
+  wait/unpack/verify/backup/wipe/copy/cleanup with a real progress bar,
+  then relaunches the stub and cleans itself up. Wipe and copy failures
+  restore from instant same-volume `.bak` renames (stale `.bak` from a
+  crashed run is swept at updater start, in cleaner.cmd, and in
+  `AppPaths::dataDir` on next launch). 0.2.0 installs predate the updater
+  exe, so they fall back to the generated `apply.cmd` script path (same
+  backup/restore guards).
   Either way: assert staged `new\library\Totthodhara.exe` + root stub exist
   BEFORE wiping, check `xcopy`, relaunch the install on ANY failure path
   (the app already quit). Asset match is the exact portable zip name -
@@ -157,11 +164,11 @@ cmake --build build
     `systemTintChanged`, `transparencyChanged`. Miss one and corners/tint
     go stale.
 - Palette deltas: System bar is glassy (`barFill` alpha = `glassAlpha`,
-  driven by the Bar transparency slider, default 0.82) while System
+  driven by the Bar opacity slider, default 0.80) while System
   cards stay near-solid (dark 0.88) so text stays pure white. System borders
   are brightened (white/black 28%). Explicit Dark/Light keep solid frosts.
 - Derived sizes — DO NOT rescale without asking:
-  bar `Small 26 / Medium 28 / Large 34`, `cardHeight = barHeight - 4`,
+  bar `Small 26 / Medium 28 / Large 34`, `cardHeight = barHeight - 5`,
   pill radii `barRadius = height/2`, `cardRadius = height/2` (bound to the
   bar/cards; the Settings toggle visibly rounds/flattens through them — the
   radius was once hardcoded `12`, which made the toggle a no-op).
@@ -234,7 +241,8 @@ cmake --build build
   of the strip in 220ms. Never overlay buttons on the cards — sliding under
   an opaque button reads as a glitch. They are RowLayout siblings of the
   strip container, not ListView children.
-- Toast 1400ms. Preview delay 350ms. Fullscreen auto-hide remembers manual
+- Toast 1400ms in its own window above/below the bar (never inside the
+  exact-fit shelf — negative coords clip). Preview delay 350ms. Fullscreen auto-hide remembers manual
   hides (`userHidden`).
 
 ## 5. Clip cards (ClipCard.qml + ClipStore.qml)
@@ -304,7 +312,7 @@ cmake --build build
     The OS eats the mouse release; without this the card sticks faded/
     pressed until the next click. Keep `suppressClick=true` (eats the
     phantom post-drag click; do NOT clear it early or drops double-fire).
-  - Threshold 8px. Toast `Dropped!` / `Drag cancelled`.
+  - Threshold 16px. Toast `Dropped!` / `Drag cancelled`.
 - Images: clipboard is read ONCE per notification (title/file/hash from one
   `QImage`; null reads return early — no `0x0` cards). Single-read also
   covers title/file mismatch races.

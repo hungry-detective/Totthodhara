@@ -23,14 +23,22 @@ Item {
         onRejected: (message) => root.toast(message)
         // Async favicon: swap the globe glyph for the site icon, in place.
         // (A refresh() here would replay the arrival animation on every
-        // card each time any icon lands.)
+        // card each time any icon lands.) Twins share the URL, so every
+        // match upgrades (id-first elsewhere, URL here — same icon either
+        // way, and patching only the first row desyncs model from view).
         onIconReady: (detail, path) => {
-            const k = items.findIndex((x) => x.detail === detail);
-            if (k >= 0) {
-                items[k] = Object.assign({}, items[k], { icon: path });
+            let hit = false
+            for (let k = 0; k < items.length; k++) {
+                if (items[k].detail === detail) {
+                    items[k] = Object.assign({}, items[k], { icon: path })
+                    hit = true
+                }
+            }
+            if (hit) {
+                items = items.slice(); // notify model truth (element writes don't)
                 for (let r = 0; r < view.count; r++) {
                     if (view.get(r).detail === detail)
-                        view.setProperty(r, "icon", path);
+                        view.setProperty(r, "icon", path)
                 }
             }
         }
@@ -101,6 +109,10 @@ Item {
             snippet: it.snippet,
             selected: it.selected,
             added: it.added,
+            // Inline action feedback ("Pasted!") lives here, never as a
+            // structural rebuild: always reset on refresh so a pending
+            // flash can never stick past a strip rebuild.
+            flashText: (it.flashText !== undefined) ? it.flashText : "",
             pos: i + 1
         }));
     }
@@ -160,6 +172,7 @@ Item {
     }
 
     // Backend entry: a fresh copy from Windows.
+    // No inline flash here: the new card sliding in IS the feedback.
     function addClip(item) {
         items.unshift({
             title: item.title,
@@ -172,7 +185,6 @@ Item {
             added: seq++
         });
         trimHistory();
-        toast("Clipped!");
         refresh();
         persist();
     }
@@ -198,33 +210,37 @@ Item {
         items = items.filter((x) => !gone.has(x));
     }
 
-    // Auto-clean: drop file-backed items (images, copied files) older than
-    // autoCleanHours, unless pinned/snippet. Text/links carry no files, so
-    // they are exempt. Returns true when anything left.
+    // Auto-clean: drop file-backed items (images in data/clips/) older
+    // than autoCleanHours, unless pinned/snippet/selected. Referenced
+    // Explorer originals are NEVER deleted (dropFiles only removes our own
+    // clips/ payloads): their rows just fall off the shelf. Text/links
+    // carry no files, so they are exempt. Returns true when anything left.
     function pruneOld() {
         if (AppState.autoCleanHours <= 0)
             return false;
         let dropped = false;
         for (let k = items.length - 1; k >= 0; k--) {
             const m = items[k];
-            if (m.pinned || m.snippet)
+            if (m.pinned || m.snippet || m.selected)
                 continue;
             if ((m.kind !== "image" && m.kind !== "file")
                 || !String(m.detail).startsWith("file:"))
                 continue;
             if (storage.fileAgeHours(m.detail) > AppState.autoCleanHours) {
-                storage.removeFile(m.detail);
+                dropFiles(m);
                 items.splice(k, 1);
                 dropped = true;
             }
         }
+        if (dropped)
+            items = items.slice(); // notify (in-place splices don't)
         return dropped;
     }
 
     // Click = copy back + auto-paste. Ctrl+click = instant delete
-    // (WPF behavior). Shift+click = multi-select toggle. Selection edits
-    // are surgical (one view row): a full refresh replays the new-arrival
-    // animation on EVERY card, which is distracting on a plain click.
+    // (WPF behavior). Shift+click = multi-select toggle. Selection edits are surgical
+    // (one view row): a full refresh replays the new-arrival animation on
+    // EVERY card, which is distracting on a plain click.
     function clickItem(i, shift, ctrl) {
         const m = findItem(i);
         if (!m) {
@@ -243,22 +259,23 @@ Item {
             const on = !m.selected;
             replaceItem(m, { selected: on });
             view.setProperty(i, "selected", on);
-            toast(on ? "Selected" : "Deselected");
+            setFlash(i, on ? "Selected" : "Deselected");
         } else {
             clearSelection();
+            let ok = true;
             if (m.kind === "image" || m.kind === "file") {
                 if (m.detail.startsWith("file:///"))
-                    clipboard.copyFiles([m.detail.replace("file:///", "")],
+                    clipboard.copyFiles([m.detail],
                                         AppState.copyToDestination);
-                else
-                    toast("Demo item (not a real file)");
+                else {
+                    ok = false;
+                    setFlash(i, "Not a file");
+                }
             } else {
                 clipboard.copyText(m.detail, AppState.copyToDestination);
             }
-            if (AppState.copyToDestination)
-                toast("Pasted!");
-            else
-                toast("Copied!");
+            if (ok)
+                setFlash(i, AppState.copyToDestination ? "Pasted!" : "Copied!");
         }
     }
 
@@ -280,13 +297,40 @@ Item {
         }
     }
 
+    // Inline card feedback: swaps the card title for ~1.2s ("Pasted!"),
+    // then the card heals itself. Surgical like selection edits — never
+    // refresh(), so neighbors never move or replay animations. The card's
+    // own timer clears by stable `added` id (never by row: rows shift).
+    // Model role is `flashText` (card already uses `flash` for its click bloom).
+    function setFlash(i, text) {
+        const m = findItem(i);
+        if (!m)
+            return;
+        replaceItem(m, { flashText: text });
+        view.setProperty(i, "flashText", text);
+    }
+    function setFlashById(added, text) {
+        const r = indexOfAdded(added);
+        if (r >= 0)
+            setFlash(r, text);
+    }
+    function clearFlashById(added) {
+        const r = indexOfAdded(added);
+        if (r < 0)
+            return;
+        const m = findItem(r);
+        if (m)
+            replaceItem(m, { flashText: "" });
+        view.setProperty(r, "flashText", "");
+    }
+
     function togglePin(i) {
         const m = findItem(i);
         if (m) {
             const on = !m.pinned;
             replaceItem(m, { pinned: on });
-            toast(on ? "Pinned" : "Unpinned");
             refresh();
+            setFlashById(m.added, on ? "Pinned" : "Unpinned");
             persist();
         }
     }
@@ -296,16 +340,17 @@ Item {
         if (m) {
             const on = !m.snippet;
             replaceItem(m, { snippet: on });
-            toast(on ? "Saved as snippet" : "Snippet removed");
             refresh();
+            setFlashById(m.added, on ? "Saved as snippet" : "Snippet removed");
             persist();
         }
     }
 
-    // Surgical removal: exactly this row plays the remove transition and
-    // followers renumber in place. A full refresh() here rebuilds every
-    // delegate (all replay arrival animations + renumber at once), which
-    // reads as "deleted the wrong item".
+    // Instant removal, no "Deleted!" beat: the row animating out IS the
+    // feedback. Surgical: exactly this row plays the remove transition
+    // and followers renumber in place. A full refresh() here rebuilds
+    // every delegate (all replay arrival animations + renumber at once),
+    // which reads as "deleted the wrong item".
     function deleteItem(i) {
         const m = findItem(i);
         if (!m) {
@@ -328,13 +373,42 @@ Item {
             next.splice(k, 1);
         items = next;
         view.remove(i, 1);
-        for (let k = i; k < view.count; k++)
-            view.setProperty(k, "pos", k + 1);
-        toast("Deleted!");
+        for (let j = i; j < view.count; j++)
+            view.setProperty(j, "pos", j + 1);
         persist();
     }
 
+    // Clear history flashes "Deleted!" inline on every removed card
+    // (same language as Pasted!), then the rows go away together.
+    // Pinned/snippets stay and never flash. The strip emptying plus the
+    // inline beat is the feedback — never a center toast.
+    property bool clearPending: false
+    Timer {
+        id: clearTimer
+        interval: 600
+        onTriggered: root.finishClearHistory()
+    }
     function clearHistory() {
+        if (root.clearPending)
+            return;
+        let ids = 0;
+        for (let k = 0; k < view.count; k++) {
+            const m = findItem(k);
+            if (m && !m.pinned && !m.snippet) {
+                setFlash(k, "Deleted!");
+                ids++;
+            }
+        }
+        if (ids === 0) {
+            searchText = "";
+            refresh();
+            return;
+        }
+        root.clearPending = true;
+        clearTimer.restart();
+    }
+    function finishClearHistory() {
+        root.clearPending = false;
         for (let k = items.length - 1; k >= 0; k--) {
             if (!items[k].pinned && !items[k].snippet) {
                 dropFiles(items[k]);
@@ -343,7 +417,6 @@ Item {
         }
         items = items.slice(); // notify (in-place splices don't)
         searchText = "";
-        toast("History cleared");
         refresh();
         persist();
     }
@@ -367,7 +440,7 @@ Item {
         for (const m of sel) {
             if ((m.kind === "image" || m.kind === "file")
                 && String(m.detail).startsWith("file:///"))
-                files.push(m.detail.replace("file:///", ""));
+                files.push(m.detail);
             else if (m.kind === "text" || m.kind === "url" || m.kind === "color")
                 texts.push(m.detail);
         }
@@ -380,12 +453,14 @@ Item {
         else if (texts.length > 0)
             clipboard.copyText(texts.join("\n"), AppState.copyToDestination);
         else {
-            toast("Nothing to paste");
+            const skipped = sel.filter((m) => m.kind !== "text" && m.kind !== "url" && m.kind !== "color").length;
+            toast(skipped > 0 ? "Demo items can't be pasted" : "Nothing to paste");
             return;
         }
-        const n = sel.length;
+        const msg = AppState.copyToDestination ? "Pasted!" : "Copied!";
+        for (const m of sel)
+            setFlashById(m.added, msg);
         clearSelection();
-        toast(AppState.copyToDestination ? "Pasted " + n + " items!" : "Copied " + n + " items!");
         persist();
     }
 
@@ -403,20 +478,21 @@ Item {
         const m = findItem(i);
         if (m) {
             clipboard.openUrl(m.detail);
-            toast("Opening link...");
+            setFlash(i, "Opening...");
         }
     }
 
     // Drag-out to another app: OS takes the mime payload (text / link /
-    // file). The card lift/fade anim runs in ClipCard.dragging; the toast
-    // here is the after-drop feedback.
+    // file). The card lift/fade anim runs in ClipCard.dragging; the inline
+    // flash here is the after-drop feedback on the same card.
     function beginSystemDrag(i) {
         const m = findItem(i);
         if (!m)
             return;
+        const added = m.added;
         const dropped = clipboard.startSystemDrag(m.title, m.kind, m.detail,
                                                       AppState.effectiveTheme === "Dark");
-        toast(dropped ? "Dropped!" : "Drag cancelled");
+        setFlashById(added, dropped ? "Dropped!" : "Cancelled");
     }
 
     // Starter content: none. Real copies land here via the backend.

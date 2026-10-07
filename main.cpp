@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
     QGuiApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("Totthodhara"));
     app.setApplicationName(QStringLiteral("Totthodhara"));
-    app.setApplicationVersion(QStringLiteral("0.3.0"));
+    app.setApplicationVersion(QStringLiteral("0.1.0"));
     // Fully portable prefs: settings live next to history.db as an INI
     // file instead of the registry, so the whole app (history + prefs)
     // moves with the folder. Same dir AppPaths resolves (stub env aware).

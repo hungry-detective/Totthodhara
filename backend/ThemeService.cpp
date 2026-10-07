@@ -151,25 +151,6 @@ void ThemeService::applyGlass(QQuickWindow *window, bool enable, bool dark,
         void *data;
         size_t dataSize;
     };
-    auto glassColor = [&]() {
-        // Low alpha on purpose: the QML barFill carries the tone, the native
-        // layer is only blur. A strong native tint would paint a visible
-        // rectangle past the rounded pill ends (legacy acrylic covers the
-        // whole window, not the QML silhouette) — System-mode-only artifact,
-        // explicit modes never enable glass.
-        const int alpha = 0x20;
-        DWORD col = 0;
-        BOOL opaque = FALSE;
-        if (FAILED(DwmGetColorizationColor(&col, &opaque)))
-            col = dark ? 0x002A2A2E : 0x00F2F2F2;
-        const int ar = (col >> 16) & 0xff, ag = (col >> 8) & 0xff, ab = col & 0xff;
-        const int br = dark ? 0x2A : 0xF2, bg = dark ? 0x2A : 0xF2, bb = dark ? 0x2E : 0xF2;
-        const int r = (br * 55 + ar * 45) / 100;
-        const int g = (bg * 55 + ag * 45) / 100;
-        const int b = (bb * 55 + ab * 45) / 100;
-        return static_cast<int>((unsigned(alpha) << 24) | (unsigned(b) << 16)
-                                | (unsigned(g) << 8) | unsigned(r));
-    };
     SetCompAttrFn setAttr = nullptr;
     if (HMODULE user32 = GetModuleHandleW(L"user32.dll"))
         setAttr = reinterpret_cast<SetCompAttrFn>(
@@ -189,8 +170,6 @@ void ThemeService::applyGlass(QQuickWindow *window, bool enable, bool dark,
     // DWM constants, numeric: older MinGW headers may lack the enums.
     constexpr int ATTR_BACKDROP = 20; // DWMWA_SYSTEMBACKDROP_TYPE
     constexpr int ATTR_CORNER = 33;   // DWMWA_WINDOW_CORNER_PREFERENCE
-    constexpr int ACRYLIC = 3;        // DWMSBT_TRANSIENTWINDOW: real DWM
-                                      // acrylic, the taskbar material
     constexpr int BACKDROP_NONE = 1;
     constexpr int SQUARE = 1;         // DWMWCP_DONOTROUND
     if (!enable || !windowsEffectsOn()) {

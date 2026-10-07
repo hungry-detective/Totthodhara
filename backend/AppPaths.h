@@ -30,6 +30,51 @@ inline QString dataDir()
     QDir().mkpath(dir);
     QDir().mkpath(dir + QStringLiteral("/clips"));
     QDir().mkpath(dir + QStringLiteral("/favicons"));
+    // Update crash recovery + tidiness (exact names only, never user
+    // data). dataDir's parent is the install root in every layout. A
+    // killed updater leaves a partial new tree: if neither exe runs but
+    // backups exist, drop the partial tree and put the backup back — the
+    // app always starts whole. Otherwise just sweep stale .bak leftovers.
+    {
+        QDir rootDir(dir);
+        if (rootDir.cdUp()) {
+            const QString root = rootDir.absolutePath();
+            const QString libExe = root + QStringLiteral("/library/Totthodhara.exe");
+            const QString stubExe = root + QStringLiteral("/Totthodhara.exe");
+            const QString libBak = root + QStringLiteral("/library.bak");
+            const QString stubBak = root + QStringLiteral("/Totthodhara.exe.bak");
+            auto clearPartial = [&]() {
+                for (const QString &e :
+                     rootDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
+                    if (e.compare(QStringLiteral("data"), Qt::CaseInsensitive) == 0)
+                        continue;
+                    if (e.endsWith(QStringLiteral(".bak"), Qt::CaseInsensitive))
+                        continue;
+                    QDir(rootDir.filePath(e)).removeRecursively();
+                }
+                for (const QString &e :
+                     rootDir.entryList(QDir::Files | QDir::Hidden | QDir::System)) {
+                    if (e.endsWith(QStringLiteral(".bak"), Qt::CaseInsensitive))
+                        continue;
+                    QFile::remove(rootDir.filePath(e));
+                }
+            };
+            if (!QFile::exists(libExe) && !QFile::exists(stubExe)
+                && (QDir(libBak).exists() || QFile::exists(stubBak))) {
+                clearPartial();
+                if (QDir(libBak).exists())
+                    QDir().rename(libBak, root + QStringLiteral("/library"));
+                if (QFile::exists(stubBak))
+                    QFile::rename(stubBak, stubExe);
+            } else {
+                QFile::remove(stubBak);
+                QDir(libBak).removeRecursively();
+            }
+            // Stale update stage (killed updater): best effort — locked
+            // files simply survive until a later launch.
+            QDir(QDir::tempPath() + QStringLiteral("/Totthodhara-update")).removeRecursively();
+        }
+    }
 
     const QString legacy =
         QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);

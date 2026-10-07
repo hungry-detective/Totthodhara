@@ -11,7 +11,7 @@ Window {
     id: settings
     width: 720
     height: 560
-    minimumWidth: 600
+    minimumWidth: 700
     minimumHeight: 440
     title: "Totthodhara Settings"
     color: "transparent"
@@ -65,7 +65,7 @@ Window {
         // meanwhile, and the 30s/60s network guards always release it.
         if (updateButton.updNote === "" && updateButton.updState === "idle") {
             updateButton.updState = "checking"
-            Updater.checkForUpdates()
+            Updater.checkForUpdates(true)
         }
     }
 
@@ -322,7 +322,7 @@ Window {
                                     // its label; the transparency card takes
                                     // the freed width.
                                     Rectangle {
-                                        Layout.preferredWidth: 200
+                                        Layout.preferredWidth: 190
                                         implicitHeight: 46
                                         radius: 10
                                         color: AppState.barBg
@@ -364,13 +364,14 @@ Window {
                                                 text: "Bar opacity"
                                                 font.bold: true
                                                 font.pixelSize: 11
+                                                elide: Text.ElideRight
                                                 color: AppState.text
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignVCenter
                                             }
                                             ThemedSlider {
                                                 id: glassSlider
-                                                Layout.preferredWidth: 100
+                                                Layout.preferredWidth: 90
                                                 from: 0
                                                 to: 100
                                                 stepSize: 1
@@ -383,7 +384,7 @@ Window {
                                             // Direct percent input: mirrors the slider both ways.
                                             ThemedSpin {
                                                 id: glassSpin
-                                                Layout.preferredWidth: 64
+                                                Layout.preferredWidth: 60
                                                 from: 0
                                                 to: 100
                                                 value: Math.round(AppState.glassAlpha * 100)
@@ -401,7 +402,7 @@ Window {
                                     spacing: 10
                                     Rectangle {
                                         id: toneDotsCard
-                                        Layout.preferredWidth: 250
+                                        Layout.preferredWidth: 240
                                         implicitHeight: toneDotsCol.implicitHeight + 16
                                         radius: 10
                                         color: AppState.barBg
@@ -486,13 +487,14 @@ Window {
                                                 text: "Intensity"
                                                 font.bold: true
                                                 font.pixelSize: 11
+                                                elide: Text.ElideRight
                                                 color: AppState.text
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignVCenter
                                             }
                                             ThemedSlider {
                                                 id: toneSlider
-                                                Layout.preferredWidth: 70
+                                                Layout.preferredWidth: 80
                                                 from: 0
                                                 to: 100
                                                 stepSize: 1
@@ -505,7 +507,7 @@ Window {
                                             // Direct percent input: mirrors the slider both ways.
                                             ThemedSpin {
                                                 id: toneSpin
-                                                Layout.preferredWidth: 64
+                                                Layout.preferredWidth: 60
                                                 from: 0
                                                 to: 100
                                                 value: Math.round(AppState.toneIntensity * 100)
@@ -899,8 +901,8 @@ Window {
                                 }
                                 Image {
                                     Layout.alignment: Qt.AlignHCenter
-                                    Layout.preferredWidth: 88
-                                    Layout.preferredHeight: 88
+                                    Layout.preferredWidth: 144
+                                    Layout.preferredHeight: 144
                                     source: "qrc:/resources/app.png"
                                 }
                                 Label {
@@ -912,9 +914,7 @@ Window {
                                 }
                                 Label {
                                     Layout.alignment: Qt.AlignHCenter
-                                    text: updateButton.updLatest === ""
-                                        ? "Version " + Qt.application.version
-                                        : "Version " + Qt.application.version + "  •  latest " + updateButton.updLatest
+                                    text: "Version " + Qt.application.version
                                     color: AppState.text
                                     font.pixelSize: 12
                                     font.bold: true
@@ -937,23 +937,28 @@ Window {
                                         id: updateButton
                                         property string updState: "idle"
                                         property string updVersion: ""
-                                        property string updLatest: ""
                                         property string updNote: ""
+                                        property string updNotesFull: ""
+                                        property bool updDetailsOpen: false
                                         Layout.preferredWidth: 210
                                         Layout.preferredHeight: 34
                                         radius: 8
-                                        enabled: (updState === "idle" || updState === "available") && !Updater.busy
+                                        enabled: (updState === "idle" || updState === "available" || updState === "uptodate") && !Updater.busy
                                         // Disabled reads disabled (a live-looking dead
                                         // button was reported as "nothing happens").
                                         opacity: enabled ? 1 : 0.45
-                                        color: tap.pressed ? Qt.darker(AppState.accent, 1.15)
+                                        // Fresh green while confirming up-to-date,
+                                        // accent everywhere else.
+                                        color: updateButton.updState === "uptodate" ? "#3fb950"
+                                            : tap.pressed ? Qt.darker(AppState.accent, 1.15)
                                             : tapHover.hovered && enabled ? Qt.lighter(AppState.accent, 1.1) : AppState.accent
                                         Text {
                                             anchors.centerIn: parent
                                             text: updateButton.updState === "checking" ? "Checking…"
-                                                : updateButton.updState === "available" ? "Download " + updateButton.updVersion + " & restart"
+                                                : updateButton.updState === "available" ? "Download Latest " + updateButton.updVersion
                                                 : updateButton.updState === "downloading" ? "Downloading…"
                                                 : updateButton.updState === "installing" ? "Installing…"
+                                                : updateButton.updState === "uptodate" ? "You are up to date"
                                                 : "Check for updates"
                                             font.bold: true
                                             font.pixelSize: 13
@@ -968,7 +973,7 @@ Window {
                                                     Updater.downloadAndInstall()
                                                 else {
                                                     updateButton.updState = "checking"
-                                                    Updater.checkForUpdates()
+                                                    Updater.checkForUpdates(false)
                                                 }
                                             }
                                         }
@@ -1026,18 +1031,63 @@ Window {
                                     wrapMode: Text.WordWrap
                                     color: AppState.muted
                                 }
+                                // Full changelog lives one tap away: the About
+                                // card stays small, long notes expand in place
+                                // (the page scrolls).
+                                Text {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    visible: updateButton.updState === "available" && updateButton.updNotesFull !== ""
+                                    text: updateButton.updDetailsOpen ? "▴ Hide details" : "▾ What's new"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: AppState.accent
+                                    HoverHandler { cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: updateButton.updDetailsOpen = !updateButton.updDetailsOpen }
+                                }
+                                Label {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.preferredWidth: 420
+                                    visible: updateButton.updState === "available" && updateButton.updDetailsOpen
+                                    text: updateButton.updNotesFull
+                                    horizontalAlignment: Text.AlignHCenter
+                                    wrapMode: Text.WordWrap
+                                    color: AppState.muted
+                                    font.pixelSize: 12
+                                }
+                                // Up-to-date confirmation lives on the button itself
+                                // for a moment, then falls back to the check.
+                                Timer {
+                                    id: uptodateTimer
+                                    interval: 2500
+                                    onTriggered: {
+                                        if (updateButton.updState === "uptodate")
+                                            updateButton.updState = "idle"
+                                    }
+                                }
                                 Connections {
                                     target: Updater
                                     function onCheckFinished(available, version, notes) {
-                                        updateButton.updLatest = version
                                         if (available) {
                                             updateButton.updState = "available"
                                             updateButton.updVersion = version
-                                            const first = String(notes).split("\n")[0].substring(0, 140)
-                                            updateButton.updNote = "New in " + version + (first ? ": " + first : "")
+                                            // Headline: first line only, cut at a word
+                                            // boundary (never mid-word like "self-u").
+                                            // Tip: write releases with a short first
+                                            // line — it becomes this headline.
+                                            const head = String(notes).split("\n")[0].trim()
+                                            let cut = head
+                                            if (cut.length > 140) {
+                                                cut = cut.substring(0, 140)
+                                                const sp = cut.lastIndexOf(" ")
+                                                cut = (sp > 60 ? cut.substring(0, sp) : cut) + "…"
+                                            }
+                                            updateButton.updNote = "New in " + version + (cut ? ": " + cut : "")
+                                            updateButton.updNotesFull = String(notes).trim()
+                                            updateButton.updDetailsOpen = false
                                         } else {
-                                            updateButton.updState = "idle"
-                                            updateButton.updNote = "You are up to date."
+                                            updateButton.updState = "uptodate"
+                                            updateButton.updNote = ""
+                                            uptodateTimer.restart()
                                         }
                                     }
                                     function onCheckFailed(error) {

@@ -52,6 +52,11 @@ private:
     // Raw window pointer would dangle at teardown (the QML window can die
     // first): QPointer auto-nulls so undock/dtor never touches it.
     QPointer<QQuickWindow> m_window;
+    // HWND kept separately (Windows only): ABM_REMOVE must still go out
+    // after the QWindow is gone, or the OS keeps the reserved strip.
+#ifdef Q_OS_WINDOWS
+    HWND m_hwnd = nullptr;
+#endif
     bool m_docked = false;
 #ifdef Q_OS_WINDOWS
     UINT m_edge = 3; // ABE_BOTTOM (3); ABE_TOP (1) for top shelf

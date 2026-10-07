@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QMap>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -89,7 +90,8 @@ private:
     QStringList m_lastUrls;    // dedupe repeat notifications (files)
     quint64 m_lastImageHash = 0; // dedupe repeat notifications (bitmaps)
     quint64 m_clipSeq = 0;       // disambiguates same-millisecond captures
-    QSet<QString> m_fetching;   // hosts with a favicon fetch in flight
+    QMap<QString, QStringList> m_pendingIcons; // host -> card detail keys
+                                               // waiting on its favicon fetch
     int m_maxFileSizeMB = 25;    // bound from QML (Storage settings)
     QNetworkAccessManager *m_net = nullptr;
     QTimer m_fgTimer;          // tracks the last non-shelf foreground window

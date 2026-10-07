@@ -1,9 +1,10 @@
 // Dark modern stepper: themed field, centered value, dark step buttons.
 // Two-way pattern: parent binds `value:` for the initial number and pushes
 // external changes via syncFrom(v); every local change (typing, arrows)
-// emits committed(v) and the parent writes it back to the source.
-// Programmatic syncs NEVER assign root.value directly (assigning a bound
-// property kills the binding, which froze boxes when the slider moved).
+// emits committed(v) and the parent writes it back to the source. The first
+// local edit replaces the `value:` binding (assigning a bound property
+// always does) — by design all writers then push explicitly through
+// syncFrom/committed, so slider <-> box can never desync.
 import QtQuick
 import QtQuick.Controls
 

@@ -33,7 +33,7 @@ Window {
         // Startup update check (silent unless an update actually exists).
         if (AppState.checkUpdatesOnStart) {
             autoUpdChecking = true
-            Updater.checkForUpdates()
+            Updater.checkForUpdates(true)
         }
     }
 
@@ -45,8 +45,12 @@ Window {
         function onCheckFinished(available, version, notes) {
             if (shelf.autoUpdChecking) {
                 shelf.autoUpdChecking = false
-                if (available)
-                    store.toast("Update " + version + " available — see About")
+                // Found update announces itself: About opens on the
+                // download straight away, no visit needed.
+                if (available) {
+                    settingsWindow.section = 4
+                    settingsWindow.open()
+                }
             }
         }
     }
@@ -76,6 +80,8 @@ Window {
         property bool alwaysOnTop: true
         property bool hideClipboard: false
         property bool copyToDestination: true
+        property bool checkUpdatesOnStart: true
+        property bool runAtStartup: false
         property real glassAlpha: 0.80
         property bool showCpuRam: true
         property bool showSpeed: true
@@ -113,9 +119,13 @@ Window {
             AppState.pillStyle = prefs.pillStyle
         AppState.thumbStyle = prefs.thumbStyle
         AppState.pillMeters = prefs.pillMeters
-        AppState.alwaysOnTop = prefs.alwaysOnTop
+        AppState.alwaysOnTop = true
+        AppState.copyToDestination = true
+        // CORE invariants (toggles intentionally removed from Settings):
+        // a legacy INI carrying false must never break them again.
         AppState.hideClipboard = prefs.hideClipboard
-        AppState.copyToDestination = prefs.copyToDestination
+        AppState.checkUpdatesOnStart = prefs.checkUpdatesOnStart
+        AppState.runAtStartup = prefs.runAtStartup
         AppState.glassAlpha = prefs.glassAlpha
         AppState.showCpuRam = prefs.showCpuRam
         AppState.showSpeed = prefs.showSpeed
@@ -153,6 +163,8 @@ Window {
         function onAlwaysOnTopChanged() { prefs.alwaysOnTop = AppState.alwaysOnTop }
         function onHideClipboardChanged() { prefs.hideClipboard = AppState.hideClipboard }
         function onCopyToDestinationChanged() { prefs.copyToDestination = AppState.copyToDestination }
+        function onCheckUpdatesOnStartChanged() { prefs.checkUpdatesOnStart = AppState.checkUpdatesOnStart }
+        function onRunAtStartupChanged() { prefs.runAtStartup = AppState.runAtStartup }
         function onGlassAlphaChanged() { prefs.glassAlpha = AppState.glassAlpha }
         function onShowCpuRamChanged() { prefs.showCpuRam = AppState.showCpuRam }
         function onShowSpeedChanged() { prefs.showSpeed = AppState.showSpeed }
@@ -234,6 +246,8 @@ Window {
             shelf.y = Screen.height - shelf.height - 52   // above the taskbar
             if (shelf.visible)
                 appBar.dock(shelf)
+            else
+                appBar.undock()
         } else {
             shelf.y = 0
             if (shelf.visible)
@@ -298,11 +312,14 @@ Window {
         const all = shelf.orderKeys.split(",")
         const out = []
         for (const k of all) {
+            if (out.indexOf(k) >= 0)
+                continue // hand-edited duplicates render once
             if (k === "hw" && shelf.hwOnLeft && AppState.showCpuRam)
                 out.push(k)
             else if (k === "net" && shelf.netOnLeft && AppState.showSpeed)
                 out.push(k)
-            else if (k === "clock" && shelf.clockOnLeft && AppState.showWorldClock)
+            else if (k === "clock" && shelf.clockOnLeft && AppState.showWorldClock
+                     && (AppState.showClock1 || AppState.showClock2))
                 out.push(k)
         }
         if (shelf.hwOnLeft && AppState.showCpuRam && out.indexOf("hw") < 0)
@@ -317,11 +334,14 @@ Window {
         const all = shelf.orderKeys.split(",")
         const out = []
         for (const k of all) {
+            if (out.indexOf(k) >= 0)
+                continue // hand-edited duplicates render once
             if (k === "hw" && !shelf.hwOnLeft && AppState.showCpuRam)
                 out.push(k)
             else if (k === "net" && !shelf.netOnLeft && AppState.showSpeed)
                 out.push(k)
-            else if (k === "clock" && !shelf.clockOnLeft && AppState.showWorldClock)
+            else if (k === "clock" && !shelf.clockOnLeft && AppState.showWorldClock
+                     && (AppState.showClock1 || AppState.showClock2))
                 out.push(k)
         }
         if (!shelf.hwOnLeft && AppState.showCpuRam && out.indexOf("hw") < 0)
@@ -352,37 +372,50 @@ Window {
         }
     }
 
-    // Status toast above the bar.
-    Rectangle {
-        id: toast
+    // Status toast: its OWN window above/below the bar. It used to be a
+    // rectangle inside the exact-fit shelf, i.e. at negative coords the
+    // HWND clips — every toast was invisible.
+    Window {
+        id: toastWin
+        flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
+        color: "transparent"
         visible: false
-        anchors.bottom: bar.top
-        anchors.bottomMargin: 6
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: toastText.width + 24
+        width: 200
         height: 28
-        radius: 14
-        color: AppState.cardBg
-        border.color: AppState.accent
-        Text {
-            id: toastText
-            anchors.centerIn: parent
-            color: AppState.text
-            font.pixelSize: 12
+        Rectangle {
+            anchors.fill: parent
+            radius: 14
+            color: AppState.cardBg
+            border.color: AppState.accent
+            Text {
+                id: toastText
+                anchors.centerIn: parent
+                width: Math.min(implicitWidth, parent.width - 24)
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+                color: AppState.text
+                font.pixelSize: 12
+            }
         }
         Timer {
             id: toastTimer
             interval: 1400
-            onTriggered: toast.visible = false
+            onTriggered: toastWin.visible = false
         }
+    }
+    function showToast(message) {
+        toastText.text = message
+        toastWin.width = Math.min(480, toastText.implicitWidth + 24)
+        toastWin.x = Math.round(shelf.x + (shelf.width - toastWin.width) / 2)
+        toastWin.y = popupY(toastWin.height)
+        toastWin.show()
+        toastWin.requestActivate()
+        toastWin.visible = true
+        toastTimer.restart()
     }
     Connections {
         target: store
-        function onToast(message) {
-            toastText.text = message
-            toast.visible = true
-            toastTimer.restart()
-        }
+        function onToast(message) { showToast(message) }
     }
 
     // The bar: fully rounded floating capsule, no border (the edge against
@@ -576,6 +609,8 @@ Window {
                 snippet: model.snippet
                 selected: model.selected
                 cardIndex: model.pos
+                flashText: model.flashText ?? ""
+                addedId: model.added ?? -1
                 viewIndex: index
                 storeRef: store
                 listRef: cards
@@ -612,8 +647,6 @@ Window {
                         shelf.x + pt.x + item.width / 2, shelf.y)
                 }
                 onPreviewRequested: (item) => {
-                    // TEMP-DIAG: proves what arrives at the popup (revert).
-                    store.toast("pv:" + item.detail.split("\n").length + "L/" + item.detail.length + "ch")
                     const pt = item.mapToItem(shelf.contentItem, 0, 0)
                     const cx = shelf.x + pt.x + item.width / 2
                     if (item.kind === "image") {
@@ -986,8 +1019,6 @@ Window {
             return l ? l.item : null
         }
         function hitTest(gx, gy) {
-            if (AppState.hideClipboard)
-                return ""
             for (let gi = 0; gi < 3; gi++) {
                 const g = gi === 0 ? "hw" : gi === 1 ? "net" : "clock"
                 const it = activeItem(g)
@@ -1653,7 +1684,10 @@ Window {
     // would be clipped to the shelf). Opens above the gear button.
     Window {
         id: gearPopup
-        flags: Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint
+        // Qt.Popup like every other menu: dismisses itself on outside
+        // click (Tool + onActiveChanged alone left stale menus behind when
+        // clicking back on the focus-inert shelf).
+        flags: Qt.FramelessWindowHint | Qt.Popup | Qt.WindowStaysOnTopHint
         color: "transparent"
         width: 170
         height: 176
@@ -1725,6 +1759,24 @@ Window {
 
     ClipMenu { id: clipMenu }
 
+    // Single click toggles after a short beat; a double-click cancels the
+    // beat and toggles once — without this a double-click would toggle
+    // twice (Trigger, then DoubleClick) and look dead.
+    function toggleShelfVis() {
+        if (shelf.visible) {
+            shelf.userHidden = true
+            shelf.hide()
+        } else {
+            shelf.userHidden = false
+            shelf.show()
+        }
+    }
+    Timer {
+        id: trayClickTimer
+        interval: 260
+        onTriggered: toggleShelfVis()
+    }
+
     // System tray (labs.platform works without Qt Widgets). The context
     // menu is our own themed popup (not Labs.Menu): the native menu always
     // renders in OS light style and never follows the app theme.
@@ -1734,15 +1786,11 @@ Window {
         icon.source: "qrc:/resources/app.png"
         tooltip: "Totthodhara is running"
         onActivated: (reason) => {
-            if (reason === Labs.SystemTrayIcon.Trigger
-                || reason === Labs.SystemTrayIcon.DoubleClick) {
-                if (shelf.visible) {
-                    shelf.userHidden = true
-                    shelf.hide()
-                } else {
-                    shelf.userHidden = false
-                    shelf.show()
-                }
+            if (reason === Labs.SystemTrayIcon.DoubleClick) {
+                trayClickTimer.stop()
+                toggleShelfVis()
+            } else if (reason === Labs.SystemTrayIcon.Trigger) {
+                trayClickTimer.restart()
             } else if (reason === Labs.SystemTrayIcon.Context) {
                 trayMenu.showAtCursor()
             }
@@ -1781,13 +1829,7 @@ Window {
                     label: shelf.visible ? "Hide Shelf" : "Show Shelf"
                     onTriggered: {
                         trayMenu.hide()
-                        if (shelf.visible) {
-                            shelf.userHidden = true
-                            shelf.hide()
-                        } else {
-                            shelf.userHidden = false
-                            shelf.show()
-                        }
+                        toggleShelfVis()
                     }
                 }
                 PopupItem {

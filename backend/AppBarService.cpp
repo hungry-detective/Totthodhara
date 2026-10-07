@@ -26,6 +26,7 @@ void AppBarService::dock(QQuickWindow *window)
     }
     QQuickWindow *old = m_window;
     m_window = window;
+    m_hwnd = reinterpret_cast<HWND>(window->winId());
     if (!m_callbackMsg)
         m_callbackMsg = RegisterWindowMessageW(L"AppBarMessage_Totthodhara");
     APPBARDATA abd = {};
@@ -57,6 +58,7 @@ void AppBarService::dockTop(QQuickWindow *window)
     }
     QQuickWindow *old = m_window;
     m_window = window;
+    m_hwnd = reinterpret_cast<HWND>(window->winId());
     if (!m_callbackMsg)
         m_callbackMsg = RegisterWindowMessageW(L"AppBarMessage_Totthodhara");
     APPBARDATA abd = {};
@@ -79,13 +81,14 @@ void AppBarService::dockTop(QQuickWindow *window)
 void AppBarService::undock()
 {
 #ifdef Q_OS_WINDOWS
-    if (!m_docked || !m_window)
+    if (!m_docked || !m_hwnd)
         return;
     APPBARDATA abd = {};
     abd.cbSize = sizeof(abd);
-    abd.hWnd = reinterpret_cast<HWND>(m_window->winId());
+    abd.hWnd = m_hwnd;
     abd.uCallbackMessage = m_callbackMsg;
     SHAppBarMessage(ABM_REMOVE, &abd);
+    m_hwnd = nullptr;
     m_window = nullptr;
     m_docked = false;
     emit dockedChanged();
@@ -118,21 +121,48 @@ void AppBarService::applyDock()
     HWND hwnd = reinterpret_cast<HWND>(m_window->winId());
     const double scale = dpiOf(hwnd) / 96.0;
 
-    // Our QML size (DIPs) -> physical pixels, rounded like the WPF build.
-    const int barW = int(m_window->width() * scale + 0.5);
+    // Our QML height (DIPs) -> physical pixels, rounded like the WPF build.
+    // Full-bleed shelf: the reserved rect spans the whole monitor edge.
     const int barH = int(m_window->height() * scale + 0.5);
-    // Full-bleed shelf: no side margins, rect matches the visible bar.
-    const int marginR = 0;
 
-    const int scrW = GetSystemMetrics(SM_CXSCREEN);
-    const int scrH = GetSystemMetrics(SM_CYSCREEN);
+    // The shelf's own monitor (primary metrics lie on multi-monitor setups
+    // and for negative-offset secondaries). Falls back to primary.
+    int monL = 0, monT = 0, monR = GetSystemMetrics(SM_CXSCREEN);
+    int monB = GetSystemMetrics(SM_CYSCREEN);
+    if (HMONITOR mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY)) {
+        MONITORINFO mi = {};
+        mi.cbSize = sizeof(mi);
+        if (GetMonitorInfoW(mon, &mi)) {
+            monL = mi.rcMonitor.left;
+            monT = mi.rcMonitor.top;
+            monR = mi.rcMonitor.right;
+            monB = mi.rcMonitor.bottom;
+        }
+    }
 
-    // Real taskbar top (works when taskbar is at the bottom).
-    int taskbarTop = scrH;
+    // Which edge the taskbar eats (default: bottom, identical numbers to
+    // before on single-monitor setups). QUERYPOS below settles any dispute.
+    enum TaskEdge { EdgeBottom, EdgeTop, EdgeLeft, EdgeRight };
+    TaskEdge taskEdge = EdgeBottom;
+    int taskLine = monB; // the taskbar-adjacent coordinate
     if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
         RECT tr = {};
-        if (GetWindowRect(tray, &tr))
-            taskbarTop = tr.top;
+        if (GetWindowRect(tray, &tr)) {
+            const int tw = tr.right - tr.left;
+            const int th = tr.bottom - tr.top;
+            if (tr.top <= monT + 2 && th < (monB - monT) / 2) {
+                taskEdge = EdgeTop;
+                taskLine = tr.bottom;
+            } else if (tr.left <= monL + 2 && tw < (monR - monL) / 2) {
+                taskEdge = EdgeLeft;
+                taskLine = tr.right;
+            } else if (tr.right >= monR - 2 && tw < (monR - monL) / 2) {
+                taskEdge = EdgeRight;
+                taskLine = tr.left;
+            } else {
+                taskLine = tr.top;
+            }
+        }
     }
 
     APPBARDATA abd = {};
@@ -140,23 +170,16 @@ void AppBarService::applyDock()
     abd.hWnd = hwnd;
     if (m_edge == 1) { // ABE_TOP
         abd.uEdge = 1;
-        abd.rc.left = scrW - barW - marginR;
-        abd.rc.top = 0;
-        abd.rc.right = scrW - marginR;
-        abd.rc.bottom = barH;
+        abd.rc.left = monL;
+        abd.rc.top = (taskEdge == EdgeTop) ? taskLine : monT;
+        abd.rc.right = monR;
+        abd.rc.bottom = abd.rc.top + barH;
     } else { // ABE_BOTTOM
-        // Real taskbar top (works when taskbar is at the bottom).
-        int taskbarTop = scrH;
-        if (HWND tray = FindWindowW(L"Shell_TrayWnd", nullptr)) {
-            RECT tr = {};
-            if (GetWindowRect(tray, &tr))
-                taskbarTop = tr.top;
-        }
         abd.uEdge = 3;
-        abd.rc.left = scrW - barW - marginR;
-        abd.rc.top = taskbarTop - barH;
-        abd.rc.right = scrW - marginR;
-        abd.rc.bottom = taskbarTop;
+        abd.rc.left = monL;
+        abd.rc.top = (taskEdge == EdgeBottom ? taskLine : monB) - barH;
+        abd.rc.right = monR;
+        abd.rc.bottom = (taskEdge == EdgeBottom ? taskLine : monB);
     }
 
     SHAppBarMessage(ABM_QUERYPOS, &abd); // system adjusts the rect

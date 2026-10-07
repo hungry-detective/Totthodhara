@@ -7,7 +7,8 @@ Rectangle {
     id: card
     // Width hugs the content (one-word clips don't swim in a 160px box).
     // Padding covers the row margins (9 + 10) plus breathing slack.
-    width: Math.max(52, Math.min(200, contentRow.implicitWidth + 23))
+    // Locked while inline feedback shows ("Pasted!") so neighbors never move.
+    width: lockedW > 0 ? lockedW : Math.max(52, Math.min(200, contentRow.implicitWidth + 23))
     height: AppState.cardHeight
     radius: AppState.cardRadius
     // Pill style variants — controlled by Settings > Clipboard Style.
@@ -17,12 +18,11 @@ Rectangle {
     readonly property bool isHover: AppState.pillStyle === "hover"
     readonly property bool isContrast: AppState.pillStyle === "contrast"
     readonly property bool isBorderless: AppState.pillStyle === "borderless"
-    readonly property bool isGradient: AppState.pillStyle === "gradient"
     readonly property bool isShadow: AppState.pillStyle === "shadow"
     // Hover lift works for both "hover" and "tint" styles
     readonly property bool hasHoverLift: isHover || isTint
 
-    // Fill: transparent for border/hover/gradient/shadow, accent-tint for tint, cardBg for contrast.
+    // Fill: transparent for border/hover/shadow, accent-tint for tint, cardBg for contrast.
     // Borderless selected deepens its tint so selection reads without an edge.
     color: isTint ? Qt.rgba(AppState.accent.r, AppState.accent.g, AppState.accent.b, 0.08)
         : isBorderless ? Qt.rgba(AppState.accent.r, AppState.accent.g, AppState.accent.b, selected ? 0.16 : 0.08)
@@ -32,7 +32,7 @@ Rectangle {
     // Borderless: no border at all. Selected keeps the 1px width — the
     // accent color + wash carry the state, never thickness.
     border.width: isBorderless ? 0 : 1
-    border.color: (isBorder || isGradient) ? AppState.accent : (selected ? AppState.accent : AppState.cardBorder)
+    border.color: isBorder ? AppState.accent : (selected ? AppState.accent : AppState.cardBorder)
     // Tactile press: shrink clearly, spring back on release.
     // Dragging to another app: lift + fade while the OS drag runs.
     // Hover lift style: scale up slightly on hover.
@@ -65,20 +65,6 @@ Rectangle {
         z: -1
         Behavior on opacity {
             NumberAnimation { duration: 150 }
-        }
-    }
-
-    // Gradient edge overlay (gradient style)
-    Rectangle {
-        anchors.fill: parent
-        radius: AppState.cardRadius
-        visible: isGradient
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0.0; color: Qt.rgba(AppState.accent.r, AppState.accent.g, AppState.accent.b, 0.3) }
-            GradientStop { position: 0.15; color: "transparent" }
-            GradientStop { position: 0.85; color: "transparent" }
-            GradientStop { position: 1.0; color: Qt.rgba(AppState.accent.r, AppState.accent.g, AppState.accent.b, 0.3) }
         }
     }
 
@@ -122,6 +108,32 @@ Rectangle {
     property bool snippet
     property bool selected
     property int cardIndex
+    // Inline action feedback ("Pasted!" swaps the title briefly): set by
+    // the store, auto-clears via flashClear below. Width locks while
+    // flashing so neighbors never shift.
+    property string flashText: ""
+    property int addedId: -1
+    property real lockedW: 0
+    onFlashTextChanged: {
+        if (flashText !== "") {
+            if (lockedW <= 0)
+                lockedW = width
+            pulse()
+            flashClear.restart()
+        } else {
+            lockedW = 0
+        }
+    }
+    Timer {
+        id: flashClear
+        interval: 1200
+        onTriggered: {
+            if (card.storeRef && card.addedId >= 0)
+                card.storeRef.clearFlashById(card.addedId)
+            else
+                card.flashText = ""
+        }
+    }
 
     // OS drag-out: view row + store bridge (set by the Main.qml delegate).
     property int viewIndex: -1
@@ -171,13 +183,17 @@ Rectangle {
         }
     }
 
-    // Safety net: a card can never stay faded. If a drag ever threw or
-    // raced past the cleanup below, this clears the drag visuals
-    // (harmless when already clear).
+    // Safety net: a card can never stay faded, and a stale suppressClick
+    // can never eat a future click. Restarted AFTER each drop (not before
+    // the drag): clearing it mid-drag would un-suppress the phantom
+    // post-drop click and double-fire.
     Timer {
         id: dragWatchdog
         interval: 1500
-        onTriggered: card.dragging = false
+        onTriggered: {
+            card.dragging = false
+            card.suppressClick = false
+        }
     }
 
     // Title row: index + visual fixed, title stretches (elides), open
@@ -205,7 +221,7 @@ Rectangle {
         // extension badge (file, e.g. JS / MP3 / PDF).
         Item {
             id: iconSlot
-            visible: card.kind !== "text"
+            visible: card.kind !== "text" && card.flashText === ""
             Layout.preferredWidth: card.kind === "text" ? 0 : 28
             Layout.fillHeight: true
             property bool iconIsImage: card.kind !== "image" && card.kind !== "color"
@@ -368,17 +384,21 @@ Rectangle {
             Layout.maximumWidth: 130
             Layout.fillHeight: true
             verticalAlignment: Text.AlignVCenter
-            text: card.title
+            horizontalAlignment: card.flashText !== "" ? Text.AlignHCenter : Text.AlignLeft
+            text: card.flashText !== "" ? card.flashText : card.title
             textFormat: Text.PlainText
             font.pixelSize: AppState.barSize === "Small" ? 11 : 13
-            // Pure theme text everywhere (dark = pure white, incl. resolutions).
+            font.bold: card.flashText !== ""
+            // Feedback follows the theme like every title (dark = pure
+            // white, light = near-black): accent is reserved for the
+            // click-bloom halo behind it, never for meaningful text.
             color: AppState.text
             elide: Text.ElideRight
         }
 
         Text {
             id: openGlyph
-            visible: card.kind === "url"
+            visible: card.kind === "url" && card.flashText === ""
             Layout.preferredWidth: card.kind === "url" ? 16 : 0
             Layout.fillHeight: true
             verticalAlignment: Text.AlignVCenter
@@ -454,7 +474,7 @@ Rectangle {
         }
         // Drag out to any other app: past the threshold the card lifts
         // (dragging anim) and the OS takes the mime payload. Drop result
-        // toasts via the store; the spring-back anim runs on release.
+        // flashes inline on the card via the store; the spring-back anim runs on release.
         // No drag with Ctrl/Shift held (those are delete/select clicks) and
         // a 16px threshold: press jitter past a small threshold used to
         // start a blocking OS drag that ate the release, so the click
@@ -475,7 +495,6 @@ Rectangle {
                     // the next click). try/finally: the visuals always reset,
                     // even if the store call threw.
                     hoverArea.enabled = false
-                    dragWatchdog.restart()
                     try {
                         card.storeRef.beginSystemDrag(card.viewIndex)
                     } finally {
@@ -483,6 +502,10 @@ Rectangle {
                         if (card.listRef)
                             card.listRef.interactive = true
                         hoverArea.enabled = true
+                        // Arm the watchdog now (not before the drag): the
+                        // drop is over, so a stale suppressClick from here
+                        // on can only be a missed phantom click.
+                        dragWatchdog.restart()
                     }
                 }
             }

@@ -93,21 +93,24 @@ void UpdateService::setRunAtStartup(bool on)
 #endif
 }
 
-void UpdateService::checkForUpdates()
+void UpdateService::checkForUpdates(bool allowCache)
 {    if (m_busy)
         return;
     // Fresh cache answers instantly: every launch hitting api.github.com
     // would burn the 60/hr anonymous rate limit on shared networks.
-    QString tag, url, name, notes;
-    if (readCache(tag, url, name, notes)) {
-        m_assetUrl = url;
-        m_assetName = name;
-        m_shaUrl.clear(); // offline answer: zip-only install if they proceed
-        m_pendingVersion = tag;
-        m_pendingNotes = notes;
-        const bool newer = compareVersions(QCoreApplication::applicationVersion(), tag) < 0;
-        emit checkFinished(newer, tag, notes);
-        return;
+    // Manual taps pass allowCache=false so they always verify live.
+    if (allowCache) {
+        QString tag, url, name, notes;
+        if (readCache(tag, url, name, notes)) {
+            m_assetUrl = url;
+            m_assetName = name;
+            m_shaUrl.clear(); // offline answer: zip-only install if they proceed
+            m_pendingVersion = tag;
+            m_pendingNotes = notes;
+            const bool newer = compareVersions(QCoreApplication::applicationVersion(), tag) < 0;
+            emit checkFinished(newer, tag, notes);
+            return;
+        }
     }
     m_assetUrl.clear();
     setBusy(true);
@@ -377,6 +380,34 @@ bool UpdateService::stageAndLaunch(const QString &zipPath)
     const QString updaterDst = stage + QStringLiteral("/TotthodharaUpdater.exe");
     if (QFile::exists(updaterSrc)) {
         QFile::remove(updaterDst);
+        // Self-contained stage: the updater must load its Qt from BESIDE
+        // itself, never from the install tree — a module loaded out of
+        // library/ locks that file and the wipe then fails on it
+        // (verified live). Best effort per file; run.cmd's PATH below is
+        // the fallback. Plugin dirs ride along so no plugin path config
+        // is needed at all (appdir probing finds stage/platforms etc.).
+        static const char *runtime[] = {
+            "Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Svg.dll",
+            "libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll",
+            "opengl32sw.dll", "D3Dcompiler_47.dll",
+            "platforms/qwindows.dll", "styles/qmodernwindowsstyle.dll",
+            "imageformats/qgif.dll", "imageformats/qico.dll",
+            "imageformats/qjpeg.dll", "imageformats/qsvg.dll",
+            "iconengines/qsvgicon.dll",
+        };
+        const QString libDir = root + QStringLiteral("/library/");
+        for (const char *rel : runtime) {
+            const QString dst = stage + QLatin1Char('/') + QString::fromLatin1(rel);
+            QFile::remove(dst);
+            const int slash = dst.lastIndexOf(QLatin1Char('/'));
+            QDir().mkpath(dst.left(slash));
+            QFile::copy(libDir + QString::fromLatin1(rel), dst);
+        }
+        // Launched directly — no batch involved. An earlier generated
+        // run.cmd (.cmd quoting around spaced paths) proved too fragile
+        // in testing; plain startDetached of the staged exe is exact.
+        // PATH/library fallbacks stay only as a safety net: the stage
+        // beside the exe carries everything it needs (appdir probing).
         if (QFile::copy(updaterSrc, updaterDst)
             && QProcess::startDetached(
                    updaterDst,
@@ -411,7 +442,7 @@ bool UpdateService::stageWithScript(const QString &zipPath, const QString &root,
     s << "set \"STAGE=" << stage << "\"\n";
     s << "set \"ZIP=" << zipPath << "\"\n";
     // 1. Wait until the app (and its file locks + mutex) are really gone.
-    s << "echo [1/4] Waiting for the app to exit...\n";
+    s << "echo [1/6] Waiting for the app to exit...\n";
     s << ":waitloop\n";
     s << "taskkill /F /IM Totthodhara.exe >nul 2>&1\n";
     s << "ping -n 2 127.0.0.1 >nul\n";
@@ -419,30 +450,63 @@ bool UpdateService::stageWithScript(const QString &zipPath, const QString &root,
     s << "if errorlevel 1 goto waitloop\n";
     s << "del /F /Q \"%TEMP%\\__tott_updlock\" >nul 2>&1\n";
     // 2. Unpack the release next to it.
-    s << "echo [2/4] Unpacking the new version...\n";
+    s << "echo [2/6] Unpacking the new version...\n";
     s << "powershell -NoProfile -Command \"Expand-Archive -Force '" << escZip << "' '" << escStage << "\\new'\"\n";
     s << "if errorlevel 1 goto fail\n";
     // 3. Verify the staged layout BEFORE wiping anything: a wrong-shaped
     // zip (or dead copy) must never brick the install into stub-less limbo.
-    s << "echo [3/4] Verifying the package...\n";
+    s << "echo [3/6] Verifying the package...\n";
     s << "if not exist \"%STAGE%\\new\\library\\Totthodhara.exe\" goto fail\n";
     s << "if not exist \"%STAGE%\\new\\Totthodhara.exe\" goto fail\n";
-    // 4. Replace everything except data/ (history.db, clips, settings).
-    s << "echo [4/4] Installing files (your clips and settings are kept)...\n";
-    s << "for /D %%D in (\"%ROOT%\\*\") do if /I not \"%%~nxD\"==\"data\" rmdir /S /Q \"%%D\"\n";
-    s << "del /Q \"%ROOT%\\*\" >nul 2>&1\n";
+    // 4. Safety backup first: same-volume renames are instant. A stale
+    // .bak (previous crashed run) is dropped first — and data/ is never
+    // touched by any step here.
+    s << "echo [4/6] Backing up the current install...\n";
+    s << "if exist \"%ROOT%\\Totthodhara.exe.bak\" del /F /Q \"%ROOT%\\Totthodhara.exe.bak\" >nul 2>&1\n";
+    s << "if exist \"%ROOT%\\library.bak\" rmdir /S /Q \"%ROOT%\\library.bak\" >nul 2>&1\n";
+    s << "if exist \"%ROOT%\\Totthodhara.exe\" ren \"%ROOT%\\Totthodhara.exe\" \"Totthodhara.exe.bak\"\n";
+    s << "if errorlevel 1 goto failnobak\n";
+    s << "if exist \"%ROOT%\\library\" ren \"%ROOT%\\library\" \"library.bak\"\n";
+    s << "if errorlevel 1 goto failnobak\n";
+    // 5. Replace everything except data/ (history.db, clips, settings).
+    s << "echo [5/6] Installing files (your clips and settings are kept)...\n";
+    s << "for /D %%D in (\"%ROOT%\\*\") do if /I not \"%%~nxD\"==\"data\" if /I not \"%%~xD\"==\".bak\" rmdir /S /Q \"%%D\"\n";
+    s << "for %%F in (\"%ROOT%\\*\") do if /I not \"%%~xF\"==\".bak\" del /F /Q \"%%F\" >nul 2>&1\n";
     s << "xcopy \"%STAGE%\\new\\*\" \"%ROOT%\\\" /E /I /Y >nul\n";
     s << "if errorlevel 1 goto fail\n";
-    // 5. Relaunch + clean up the stage.
+    s << "if not exist \"%ROOT%\\library\\Totthodhara.exe\" goto fail\n";
+    s << "if not exist \"%ROOT%\\Totthodhara.exe\" goto fail\n";
+    // 6. Drop the backup, relaunch + clean up the stage.
+    s << "echo [6/6] Cleaning up...\n";
+    s << "del /F /Q \"%ROOT%\\Totthodhara.exe.bak\" >nul 2>&1\n";
+    s << "rmdir /S /Q \"%ROOT%\\library.bak\" >nul 2>&1\n";
     s << "echo Done - starting Totthodhara...\n";
     s << "start \"\" \"%ROOT%\\Totthodhara.exe\"\n";
     s << "ping -n 5 127.0.0.1 >nul\n";
     s << "rmdir /S /Q \"%STAGE%\"\n";
     s << "exit /b 0\n";
-    // Any failure relaunches the (untouched or restored) install so the
-    // user is never left staring at a closed app.
-    s << ":fail\n";
+    // Rename itself failed after the stub moved: put the stub back, the
+    // install is otherwise untouched.
+    s << ":failnobak\n";
     s << "echo Something went wrong - starting your current version instead.\n";
+    s << "if exist \"%ROOT%\\Totthodhara.exe.bak\" ren \"%ROOT%\\Totthodhara.exe.bak\" \"Totthodhara.exe\"\n";
+    s << "start \"\" \"%ROOT%\\Totthodhara.exe\"\n";
+    s << "ping -n 5 127.0.0.1 >nul\n";
+    s << "rmdir /S /Q \"%STAGE%\"\n";
+    s << "exit /b 1\n";
+    // Any later failure restores the backup — but ONLY when a backup
+    // exists. Pre-backup failures (unpack/verify) must leave the healthy
+    // tree alone: wiping first would destroy it for nothing.
+    s << ":fail\n";
+    s << "echo Something went wrong - restoring your current version...\n";
+    s << "taskkill /F /IM Totthodhara.exe >nul 2>&1\n";
+    s << "ping -n 4 127.0.0.1 >nul\n";
+    s << "if not exist \"%ROOT%\\library.bak\" if not exist \"%ROOT%\\Totthodhara.exe.bak\" goto relaunchnorestore\n";
+    s << "for /D %%D in (\"%ROOT%\\*\") do if /I not \"%%~nxD\"==\"data\" if /I not \"%%~xD\"==\".bak\" rmdir /S /Q \"%%D\"\n";
+    s << "for %%F in (\"%ROOT%\\*\") do if /I not \"%%~xF\"==\".bak\" del /F /Q \"%%F\" >nul 2>&1\n";
+    s << "if exist \"%ROOT%\\library.bak\" ren \"%ROOT%\\library.bak\" \"library\"\n";
+    s << "if exist \"%ROOT%\\Totthodhara.exe.bak\" ren \"%ROOT%\\Totthodhara.exe.bak\" \"Totthodhara.exe\"\n";
+    s << ":relaunchnorestore\n";
     s << "start \"\" \"%ROOT%\\Totthodhara.exe\"\n";
     s << "ping -n 5 127.0.0.1 >nul\n";
     s << "rmdir /S /Q \"%STAGE%\"\n";

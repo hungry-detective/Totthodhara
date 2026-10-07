@@ -59,16 +59,21 @@ cmake --build build
   cross-install into the app. Also upload the
   `Totthodhara-windows-portable.zip.sha256` the script writes beside it:
   the client SHA-256-verifies the zip before installing and refuses
-  tampered downloads. Delete superseded old-edition releases so
+  tampered downloads. Write the notes with a short first line — it becomes
+  the one-line headline in About ("What's new" expands the rest).
+  Delete superseded old-edition releases so
   `releases/latest` always points at a Qt release.
 * Install flow: download to `%TEMP%/Totthodhara-update`, SHA-256 check,
   then hand off to the updater window (`library/TotthodharaUpdater.exe`,
-  copied to temp and launched with `--root/--zip/--version`): it waits out
+  copied to temp and launched via `run.cmd`, which points PATH + plugins
+  at the install's `library/` — plain launches die Qt-less): it waits out
   file locks + mutex with a live progress bar, `Expand-Archive`s the zip,
-  replaces everything except `data/` (history.db, clips/, favicons/,
-  settings INI all survive), restarts the stub, deletes the stage. 0.2.0
-  installs (no updater exe yet) fall back to the generated `apply.cmd`
-  console script with the same guards.
+  backs up stub+library to instant same-volume `.bak` renames, replaces
+  everything except `data/` (history.db, clips/, favicons/, settings INI
+  all survive), drops the backup, restarts the stub, deletes the stage.
+  Any failure restores from backup first. 0.2.0 installs (no updater exe
+  yet) fall back to the generated `apply.cmd` console script with the same
+  backup/restore guards.
 * Guards: refuses to run outside the portable layout (dev trees are never
   wiped); needs HTTPS. No signature verification yet — integrity rests on
   HTTPS + GitHub + the SHA-256 check, releases come from your own repo.

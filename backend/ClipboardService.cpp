@@ -33,6 +33,22 @@
 #endif
 
 namespace {
+// clip.log opened ONCE per process (was: open/append/close on every
+// clipboard event and favicon step — handle churn in normal use).
+// Missing C:/Temp => open fails once, writes no-op safely after.
+QTextStream &clipLog()
+{
+    static QFile f(QStringLiteral("C:/Temp/clip.log"));
+    static bool opened = false;
+    static QTextStream s;
+    if (!opened) {
+        opened = true;
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            s.setDevice(&f);
+    }
+    return s;
+}
+
 // Content hash: QImage::cacheKey is per-object (a fresh read of identical
 // pixels gets a new key), so hash sampled bytes instead. Fast enough:
 // 4K samples even for fullscreen bitmaps.
@@ -406,14 +422,31 @@ void ClipboardService::copyText(const QString &text, bool autoPaste)
 
 void ClipboardService::copyFiles(const QStringList &localPaths, bool autoPaste)
 {
+    // Accepts raw paths AND file:/// URLs (QML passes detail through
+    // untouched now): percent-encoding (%20 etc.) is decoded here, so
+    // click-paste matches drag-out on spaced/unicode paths.
     QList<QUrl> urls;
-    for (const QString &p : localPaths)
-        urls << QUrl::fromLocalFile(p);
+    QStringList locals;
+    for (const QString &p : localPaths) {
+        const QUrl u(p);
+        const QString local = u.isLocalFile() ? u.toLocalFile() : p;
+        if (local.isEmpty())
+            continue;
+        urls << QUrl::fromLocalFile(local);
+        locals << local;
+    }
     if (urls.isEmpty())
         return;
     auto *mime = new QMimeData;
     mime->setUrls(urls);
-    m_suppressUrls = localPaths;
+    // WPF parity: a single image also carries its bitmap, so bitmap-only
+    // targets (e.g. Paint) receive pixels, not just a file drop.
+    if (locals.size() == 1) {
+        const QImage img(locals.first());
+        if (!img.isNull())
+            mime->setImageData(img);
+    }
+    m_suppressUrls = locals;
     m_suppressText.clear();
     QGuiApplication::clipboard()->setMimeData(mime);
     if (autoPaste)
@@ -446,17 +479,14 @@ void ClipboardService::refetchIcon(const QString &detail)
 
 QString ClipboardService::resolveIcon(const QString &detail)
 {
-    QFile flog(QStringLiteral("C:/Temp/clip.log"));
-    flog.open(QIODevice::Append | QIODevice::Text);
-    QTextStream fout(&flog);
-    fout << "refetch: " << detail.left(40) << Qt::endl;
+    clipLog() << "refetch: " << detail.left(40) << Qt::endl;
     const QString host = QUrl(detail).host();
     if (host.isEmpty())
         return {};
     const QString dir = AppPaths::dataDir()
                         + QStringLiteral("/favicons");
     const QString cached = dir + QStringLiteral("/") + host + QStringLiteral(".png");
-    fout << "resolve: exists=" << QFile::exists(cached) << " " << cached.left(80) << Qt::endl;
+    clipLog() << "resolve: exists=" << QFile::exists(cached) << " " << cached.left(80) << Qt::endl;
     if (QFile::exists(cached))
         return QUrl::fromLocalFile(cached).toString();
     fetchFavicon(detail, detail);
@@ -615,12 +645,9 @@ QString ClipboardService::hostOf(const QString &url)
 // then upgrades to the real favicon when it arrives (cached by host).
 void ClipboardService::fetchFavicon(const QString &pageUrl, const QString &detailKey)
 {
-    QFile flog(QStringLiteral("C:/Temp/clip.log"));
-    flog.open(QIODevice::Append | QIODevice::Text);
-    QTextStream fout(&flog);
-    fout << "fetch called" << Qt::endl;
+    clipLog() << "fetch called" << Qt::endl;
     const QString host = QUrl(pageUrl).host();
-    fout << "host=" << host << Qt::endl;
+    clipLog() << "host=" << host << Qt::endl;
     if (host.isEmpty())
         return;
     const QString dir = AppPaths::dataDir()
@@ -632,10 +659,15 @@ void ClipboardService::fetchFavicon(const QString &pageUrl, const QString &detai
         return;
     }
     // One fetch per host at a time: parallel fetches save the same file
-    // concurrently and persist a torn PNG.
-    if (m_fetching.contains(host))
+    // concurrently and persist a torn PNG. Same-host cards that arrive
+    // mid-flight queue here and upgrade together when it lands (a bare
+    // early-return left them on the globe forever).
+    if (m_pendingIcons.contains(host)) {
+        if (!m_pendingIcons[host].contains(detailKey))
+            m_pendingIcons[host].append(detailKey);
         return;
-    m_fetching.insert(host);
+    }
+    m_pendingIcons.insert(host, {detailKey});
     QNetworkRequest req(QUrl(QStringLiteral("https://%1/favicon.ico").arg(host)));
     req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                      QNetworkRequest::NoLessSafeRedirectPolicy);
@@ -649,33 +681,31 @@ void ClipboardService::fetchFavicon(const QString &pageUrl, const QString &detai
 void ClipboardService::fetchFinished(QNetworkReply *reply, const QString &detailKey,
                                       bool fallbackTried)
 {
-    QFile flog(QStringLiteral("C:/Temp/clip.log"));
-    flog.open(QIODevice::Append | QIODevice::Text);
-    QTextStream fout(&flog);
-    fout << "fetch finished: err=" << reply->error()
-         << " bytes=" << reply->bytesAvailable()
-         << " fallback=" << fallbackTried << Qt::endl;
+    clipLog() << "fetch finished: err=" << reply->error()
+              << " bytes=" << reply->bytesAvailable()
+              << " fallback=" << fallbackTried << Qt::endl;
     const QByteArray data = reply->readAll();
     qInfo() << "favicon: got" << data.size() << "bytes, error =" << reply->error();
     const QImage img = QImage::fromData(data);
     const QString host = QUrl(detailKey).host();
     const QString dir = AppPaths::dataDir()
                         + QStringLiteral("/favicons");
-    fout << "img null=" << img.isNull() << " host=" << host << Qt::endl;
+    clipLog() << "img null=" << img.isNull() << " host=" << host << Qt::endl;
     if (!img.isNull() && !host.isEmpty()) {
         const QString path = dir + QStringLiteral("/") + host + QStringLiteral(".png");
         if (img.scaledToWidth(64, Qt::SmoothTransformation).save(path, "PNG")) {
-            fout << "saved icon" << Qt::endl;
-            emit iconReady(detailKey, QUrl::fromLocalFile(path).toString());
+            clipLog() << "saved icon" << Qt::endl;
+            for (const QString &key : m_pendingIcons.take(host))
+                emit iconReady(key, QUrl::fromLocalFile(path).toString());
         } else {
-            fout << "SAVE FAILED" << Qt::endl;
+            clipLog() << "SAVE FAILED" << Qt::endl;
+            m_pendingIcons.remove(host);
         }
-        m_fetching.remove(host);
         return;
     }
     if (!fallbackTried && !host.isEmpty()) {
         // Site has no /favicon.ico: use the Google icon service instead.
-        // (Stays in m_fetching across the retry.)
+        // (Waiters stay queued across the retry.)
         QNetworkRequest req(QUrl(QStringLiteral(
             "https://www.google.com/s2/favicons?domain=%1&sz=64").arg(host)));
         QNetworkReply *retry = m_net->get(req);
@@ -684,7 +714,7 @@ void ClipboardService::fetchFinished(QNetworkReply *reply, const QString &detail
             retry->deleteLater();
         });
     } else {
-        m_fetching.remove(host);
+        m_pendingIcons.remove(host);
     }
 }
 
@@ -708,10 +738,7 @@ QString ClipboardService::saveImageFile(const QImage &img)
 
 void ClipboardService::handleClipboard()
 {
-    QFile log(QStringLiteral("C:/Temp/clip.log"));
-    log.open(QIODevice::Append | QIODevice::Text);
-    QTextStream out(&log);
-    out << "handle " << QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss")) << Qt::endl;
+    clipLog() << "handle " << QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss")) << Qt::endl;
     const QClipboard *cb = QGuiApplication::clipboard();
     const QMimeData *mime = cb->mimeData();
     if (!mime)
@@ -773,6 +800,11 @@ void ClipboardService::handleClipboard()
             return;
         if (imageHash(probe) == m_lastImageHash)
             return;
+        // Record BEFORE the size gate: an oversize image fires several
+        // notifications, and without this each repeat re-saves, re-deletes
+        // and re-toasts. (A failed save below also dedupes: acceptable, the
+        // alternative is the spam loop.)
+        m_lastImageHash = imageHash(probe);
         const QString saved = saveImageFile(probe);
         if (!saved.isEmpty()) {
             // Storage setting: drop images over the size limit again (the
@@ -785,7 +817,6 @@ void ClipboardService::handleClipboard()
                 emit rejected(tr("Image over %1 MB skipped").arg(m_maxFileSizeMB));
                 return;
             }
-            m_lastImageHash = imageHash(probe);
             m_lastText.clear();
             m_lastUrls.clear();
             QVariantMap item;
@@ -825,7 +856,7 @@ void ClipboardService::handleClipboard()
         if (isColor && trimmed.startsWith(u'#'))
             trimmed.mid(1).toUInt(&hexOk, 16);
         if (isUrl) {
-            out << "url branch: " << trimmed.left(50) << Qt::endl;
+            clipLog() << "url branch: " << trimmed.left(50) << Qt::endl;
             item[QStringLiteral("title")] = hostOf(trimmed);
             item[QStringLiteral("kind")] = QStringLiteral("url");
             item[QStringLiteral("detail")] = trimmed;

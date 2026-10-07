@@ -25,8 +25,11 @@ public:
     bool busy() const { return m_busy; }
 
     // Ask GitHub for the latest release. Result arrives via checkFinished
-    // (available, version, notes) or checkFailed(error).
-    Q_INVOKABLE void checkForUpdates();
+    // (available, version, notes) or checkFailed(error). allowCache serves
+    // a fresh (<1h) cached answer instantly — used by silent background
+    // checks only; manual taps always go to the network so the answer is
+    // provably live (pulse + Checking… show while it flies).
+    Q_INVOKABLE void checkForUpdates(bool allowCache);
     // Run-at-Windows-startup (HKCU...\Run): writes/removes the entry for
     // the portable stub (dev trees register their own exe — harmless).
     Q_INVOKABLE void setRunAtStartup(bool on);

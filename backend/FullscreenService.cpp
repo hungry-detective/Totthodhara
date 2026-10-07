@@ -35,25 +35,25 @@ void FullscreenService::check()
             && clsName != QLatin1String("WorkerW")
             && clsName != QLatin1String("Progman")) {
             RECT wr = {};
-            if (!GetWindowRect(fg, &wr))
-                return;
             HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTOPRIMARY);
             MONITORINFO mi = {};
             mi.cbSize = sizeof(mi);
-            if (!GetMonitorInfoW(mon, &mi))
-                return;
-            const int mw = mi.rcMonitor.right - mi.rcMonitor.left;
-            const int mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
-            const int ww = wr.right - wr.left;
-            const int wh = wr.bottom - wr.top;
-            const bool rectMatch = qAbs(wr.left - mi.rcMonitor.left) <= 1
-                                   && qAbs(wr.top - mi.rcMonitor.top) <= 1
-                                   && qAbs(wr.right - mi.rcMonitor.right) <= 1
-                                   && qAbs(wr.bottom - mi.rcMonitor.bottom) <= 1;
-            LONG style = GetWindowLongW(fg, GWL_STYLE);
-            const bool borderlessBig = !(style & WS_CAPTION) && !(style & WS_THICKFRAME)
-                                       && ww > mw * 0.95 && wh > mh * 0.95;
-            fs = rectMatch || borderlessBig;
+            // Query failures fail VISIBLE (fs stays false): a stuck hidden
+            // shelf is worse than one tick of overlap on a transient error.
+            if (GetWindowRect(fg, &wr) && GetMonitorInfoW(mon, &mi)) {
+                const int mw = mi.rcMonitor.right - mi.rcMonitor.left;
+                const int mh = mi.rcMonitor.bottom - mi.rcMonitor.top;
+                const int ww = wr.right - wr.left;
+                const int wh = wr.bottom - wr.top;
+                const bool rectMatch = qAbs(wr.left - mi.rcMonitor.left) <= 1
+                                       && qAbs(wr.top - mi.rcMonitor.top) <= 1
+                                       && qAbs(wr.right - mi.rcMonitor.right) <= 1
+                                       && qAbs(wr.bottom - mi.rcMonitor.bottom) <= 1;
+                LONG style = GetWindowLongW(fg, GWL_STYLE);
+                const bool borderlessBig = !(style & WS_CAPTION) && !(style & WS_THICKFRAME)
+                                           && ww > mw * 0.95 && wh > mh * 0.95;
+                fs = rectMatch || borderlessBig;
+            }
         }
     }
     if (fs != m_fullscreen) {

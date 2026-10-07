@@ -38,6 +38,15 @@ taskkill /F /IM Totthodhara.exe >nul 2>&1
 goto waitlock
 :lockfree
 del /F /Q "%TEMP%\__tott_pkgtest.exe" >nul 2>&1
+rem A running PORTABLE copy locks deploy\library\ too (same exe name):
+rem probe it the same way, or the wipe below leaves stale DLLs behind.
+if not exist "deploy\library\Totthodhara.exe" goto nodeploylock
+del /F /Q "%TEMP%\__tott_pkgtest.exe" >nul 2>&1
+copy /B /Y "deploy\library\Totthodhara.exe" "%TEMP%\__tott_pkgtest.exe" >nul 2>&1
+if %errorlevel%==0 goto nodeploylock
+echo [package] deploy copy still locked, kill Totthodhara.exe manually & exit /b 1
+:nodeploylock
+del /F /Q "%TEMP%\__tott_pkgtest.exe" >nul 2>&1
 
 rem --- Configure Release fresh (picks up CMakeLists changes) ---
 cmake -S . -B build-release -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/mingw_64" "-DCMAKE_CXX_COMPILER=C:/Qt/Tools/mingw1310_64/bin/g++.exe"
@@ -49,6 +58,8 @@ rem --- Clean deploy, KEEPING data\ (user history + settings) ---
 if not exist "deploy\data" mkdir "deploy\data"
 for /D %%D in ("deploy\*") do if /I not "%%~nxD"=="data" rmdir /S /Q "%%D"
 del /Q "deploy\*" >nul 2>&1
+rem A locked survivor above leaves library\ behind: refuse to ship a mix.
+if exist "deploy\library" (echo [package] deploy wipe incomplete, kill Totthodhara.exe manually & exit /b 1)
 mkdir "deploy\library"
 
 rem --- Real exe + QML module live in library\ (auto-found next to exe) ---
