@@ -37,7 +37,7 @@ impl OsState {
     pub fn read() -> Self {
         Self {
             system_dark: !crate::winsys::system_uses_light_theme(),
-            transparency_on: crate::winsys::system_transparency_enabled(),
+            transparency_on: crate::winsys::system_transparency_enabled() && crate::winsys::is_win11(),
             color_prevalence: crate::winsys::color_prevalence(),
             accent: crate::winsys::accent_color().map(|(r, g, b)| rgb(r, g, b)).unwrap_or(rgb(0x00, 0x78, 0xD4)),
         }
@@ -110,7 +110,7 @@ pub fn build(s: &Settings, os: &OsState) -> Pal {
         let a = auto_fill.to_srgba_unmultiplied().map(|v| v as f32 / 255.0);
         let b = tone.to_srgba_unmultiplied().map(|v| v as f32 / 255.0);
         let m = |i: usize| a[i] * (1.0 - k) + b[i] * k;
-        rgbaf(m(0), m(1), m(2), if s.transparent_bar { glass_a } else { 1.0 })
+        rgbaf(m(0), m(1), m(2), if s.transparent_bar && os.transparency_on { glass_a } else { 1.0 })
     } else {
         auto_fill
     };

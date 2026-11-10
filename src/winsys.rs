@@ -379,7 +379,19 @@ fn nccalc_full(msg: u32, wp: WPARAM) -> bool {
     msg == WM_NCCALCSIZE && wp.0 != 0
 }
 
+/// winit rewrites GWL_STYLE on state changes (maximize, focus, ...): drop
+/// WS_CAPTION from every new style before it lands.
+unsafe fn strip_caption_change(msg: u32, wp: WPARAM, lp: LPARAM) {
+    if msg == WM_STYLECHANGING && wp.0 as i32 == GWL_STYLE.0 {
+        let ss = lp.0 as *mut STYLESTRUCT;
+        if !ss.is_null() {
+            (*ss).styleNew &= !WS_CAPTION.0;
+        }
+    }
+}
+
 unsafe extern "system" fn popup_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    strip_caption_change(msg, wp, lp);
     if nccalc_full(msg, wp) {
         return LRESULT(0);
     }
@@ -410,6 +422,12 @@ fn dechrome_now(h: Hwnd) {
         // transparent pill/menus (with it ON a full-client transparent window
         // renders black). The classic caption Windows would then paint is
         // blocked in the procs (WM_NCPAINT / WM_NCACTIVATE swallowed).
+        // No WS_CAPTION at all: a captionless window has no title-bar area on
+        // ANY Windows version. Relying on WM_NCCALCSIZE alone failed on
+        // Windows 10 (a ~31px invisible caption ate the 28px shelf and pushed
+        // every click one row down).
+        let st = GetWindowLongW(h.h(), GWL_STYLE) as u32;
+        let _ = SetWindowLongW(h.h(), GWL_STYLE, (st & !WS_CAPTION.0) as i32);
         let disabled: u32 = 1; // DWMNCRP_DISABLED
         let _ = DwmSetWindowAttribute(h.h(), DWMWINDOWATTRIBUTE(2), &disabled as *const _ as *const c_void, 4);
         let _ = SetWindowPos(h.h(), None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -430,6 +448,7 @@ pub fn dechrome_popup(h: Hwnd) {
 }
 
 unsafe extern "system" fn root_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    strip_caption_change(msg, wp, lp);
     if nccalc_full(msg, wp) {
         return LRESULT(0);
     }
@@ -546,6 +565,12 @@ unsafe fn foreground_check(shelf: Hwnd) -> Option<bool> {
     // A normal captioned + resizable window (maximized with an auto-hide
     // taskbar can cover the monitor too) is never "fullscreen".
     let normal_window = caption && thick;
+    // Maximized apps (e.g. WhatsApp / WinUI with a custom title bar) span
+    // ~97% of a small screen but leave the taskbar visible: not fullscreen.
+    let zoomed = IsZoomed(fg).as_bool();
+    if zoomed && !covers {
+        return Some(false);
+    }
     // 1) Covers the whole monitor and isn't a normal window (F11 browsers,
     //    fullscreen video players, borderless games).
     if covers && !normal_window {
@@ -646,6 +671,23 @@ pub fn is_apps_light_theme() -> bool {
 /// `EnableTransparency` (missing counts as on).
 pub fn system_transparency_enabled() -> bool {
     reg_dword(HKEY_CURRENT_USER, PERSONALIZE, "EnableTransparency").unwrap_or(1) != 0
+}
+
+/// Windows 11 (build 22000+). Windows 10's DWM treats a blur-behind REGION
+/// differently (the shelf shows the bare desktop instead of its content), so
+/// glass is Win11-only; Win10 gets the plain per-pixel alpha the popups use.
+/// `TOTTHODHARA_FORCE_WIN10=1` exercises the Win10 path on Win11.
+pub fn is_win11() -> bool {
+    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        if std::env::var("TOTTHODHARA_FORCE_WIN10").is_ok() {
+            return false;
+        }
+        reg_string(HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuildNumber")
+            .and_then(|b| b.trim().parse::<u32>().ok())
+            .map(|b| b >= 22000)
+            .unwrap_or(false)
+    })
 }
 
 pub fn wallpaper_key() -> String {

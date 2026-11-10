@@ -1082,6 +1082,21 @@ impl App {
         }
         let ctx = ui.ctx().clone();
         ctx.request_repaint();
+        let n = FRAMES.load(SeqCst);
+        if std::env::var("TOTTHODHARA_TEST_MENU").is_ok() {
+            // Verification: open the tray menu (no clicks) and keep it up.
+            if n == 5 {
+                let (mon, _) = winsys::monitor_of_point(0, 0);
+                let rows = vec![row(MenuId::ToggleShelf, icons::SHOW, "Hide Shelf"), row(MenuId::Settings, icons::SETTINGS, "Settings"), row(MenuId::Exit, icons::CLOSE, "Exit")];
+                self.open_menu(MenuKind::Tray, rows, 170.0, mon.r - 140, now);
+            }
+            self.show_menu(&ctx, now);
+            if n > 400 {
+                std::process::exit(0);
+            }
+            FRAMES.fetch_add(1, SeqCst);
+            return;
+        }
         if FRAMES.fetch_add(1, SeqCst) == 90 {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::ScreenshotCallback::new(move |img| {
                 let [w, h] = img.size;
@@ -1126,6 +1141,7 @@ impl eframe::App for App {
 
         if let Some((kind, out)) = showcase() {
             self.run_showcase(ui, now, &kind, out);
+            self.painted_once = true;
             return;
         }
         self.draw_bar(ui, now);
@@ -1908,10 +1924,6 @@ impl App {
             let col = if open_hover { theme::lighter(pal.accent, 1.45) } else { pal.accent };
             let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::OPEN_LINK.to_string(), fid(15.0 * k, "icons"), col));
             let gp = gc - g.size() / 2.0;
-            if open_hover {
-                let uy = gp.y + g.size().y - 3.0;
-                shapes.push(Shape::line_segment([pos2(gp.x + 1.0, uy), pos2(gp.x + g.size().x - 1.0, uy)], Stroke::new(1.0, col)));
-            }
             shapes.push(Shape::galley(gp, g, col));
         }
         // Badges: snippet star (left of pin when both), pin top-right.
@@ -2027,7 +2039,15 @@ impl App {
             _ => m.anchor_x - wp / 2,
         }
         .clamp(mon.l + m8, (mon.r - wp - m8).max(mon.l));
-        let y = if m.kind == MenuKind::Tray { (work.b - hp - m8).max(mon.t + m8) } else { self.popup_y(hp) };
+        let y = if m.kind == MenuKind::Tray {
+            // Sit above the shelf, never under it (the work area may not
+            // include the shelf's reserved band yet).
+            let shelf_up = self.shelf_visible && !self.fs_hidden && !self.hwnd.is_null() && self.s.shelf_position != "Top";
+            let bottom = if shelf_up { work.b.min(self.shelf_px.t) } else { work.b };
+            (bottom - hp - m8).max(mon.t + m8)
+        } else {
+            self.popup_y(hp)
+        };
         let rect = IRect { l: x, t: y, r: x + wp, b: y + hp };
         let pal = self.pal.clone();
         let in_sub = m.sub.is_some();

@@ -12,6 +12,7 @@ pub struct SettingsWin {
     hwnd: Hwnd,
     pub section: usize,
     maximized: bool,
+    restore: Option<winsys::IRect>,
     zone_opts: Vec<(String, String)>,
     open_combo: Option<&'static str>,
     spin_buf: std::collections::HashMap<&'static str, String>,
@@ -29,6 +30,7 @@ impl SettingsWin {
             hwnd: Hwnd(0),
             section,
             maximized: false,
+            restore: None,
             zone_opts: clocks.options(),
             open_combo: None,
             spin_buf: Default::default(),
@@ -177,8 +179,20 @@ impl SettingsWin {
     }
 
     fn toggle_max(&mut self, ui: &Ui) {
+        // Our own maximize (fills the work area): captionless windows have
+        // no reliable system maximize, and the taskbar must stay visible.
+        let _ = ui;
+        if self.hwnd.is_null() {
+            return;
+        }
         self.maximized = !self.maximized;
-        ui.ctx().send_viewport_cmd(ViewportCommand::Maximized(self.maximized));
+        if self.maximized {
+            self.restore = Some(winsys::window_rect(self.hwnd));
+            let (_, w) = winsys::monitor_of_window(self.hwnd);
+            winsys::move_window(self.hwnd, w.l, w.t, w.r - w.l, w.b - w.t, false);
+        } else if let Some(r) = self.restore.take() {
+            winsys::move_window(self.hwnd, r.l, r.t, r.r - r.l, r.b - r.t, false);
+        }
     }
 
     // ───────── pages ─────────
