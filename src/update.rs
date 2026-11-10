@@ -117,6 +117,12 @@ pub fn check(use_cache: bool) -> UpdateInfo {
             error_message: String::new(),
         })
     })();
+    // API refused (403/429 rate limit: 60 anonymous calls/hour per IP) or
+    // unreachable → resolve the same answer from the website's redirect.
+    let res = res.or_else(|api_err| {
+        crate::paths::log(format!("[Update] API check failed ({api_err}); trying releases/latest redirect"));
+        from_redirect(&cur).map_err(|e| friendly(&api_err, &e))
+    });
     match res {
         Ok(i) => {
             let _ = std::fs::write(&cache, serde_json::to_string(&i).unwrap_or_default());
@@ -124,6 +130,48 @@ pub fn check(use_cache: bool) -> UpdateInfo {
         }
         Err(e) => UpdateInfo { current_version: cur, error_message: e, ..Default::default() },
     }
+}
+
+fn friendly(api: &str, web: &str) -> String {
+    if api.contains("403") || api.contains("429") {
+        "GitHub is busy right now — try again in a few minutes".into()
+    } else {
+        format!("couldn't reach GitHub ({web})")
+    }
+}
+
+/// `github.com/<o>/<r>/releases/latest` 302-redirects to `/releases/tag/vX`.
+/// Not API-rate-limited. Asset URLs follow the fixed download pattern; the
+/// exact asset is confirmed with a HEAD request before offering it.
+fn from_redirect(cur: &str) -> Result<UpdateInfo, String> {
+    let no_redirect: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .user_agent(UA)
+        .max_redirects(0)
+        .http_status_as_error(false)
+        .build()
+        .into();
+    let resp = no_redirect.get(&format!("https://github.com/{OWNER}/{REPO}/releases/latest")).call().map_err(|e| e.to_string())?;
+    let loc = resp.headers().get("location").and_then(|v| v.to_str().ok()).ok_or_else(|| format!("http status: {}", resp.status().as_u16()))?.to_string();
+    let tag = loc.rsplit("/tag/").next().filter(|t| !t.is_empty() && !t.contains('/')).ok_or("no release tag")?.to_string();
+    let ver = tag.trim_start_matches(['v', 'V']).split(['-', '+']).next().unwrap_or("").to_string();
+    let base = format!("https://github.com/{OWNER}/{REPO}/releases/download/{tag}");
+    let url = format!("{base}/{ASSET}");
+    let head: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(20))).user_agent(UA).http_status_as_error(false).build().into();
+    let ok = head.head(&url).call().map(|r| r.status().is_success()).unwrap_or(false);
+    let sha = format!("{base}/{ASSET}.sha256");
+    let sha_ok = head.head(&sha).call().map(|r| r.status().is_success()).unwrap_or(false);
+    Ok(UpdateInfo {
+        is_update_available: ok && is_newer(&ver, cur),
+        current_version: cur.to_string(),
+        latest_version: ver,
+        download_url: if ok { url } else { String::new() },
+        sha256_url: if sha_ok { sha } else { String::new() },
+        size: 0,
+        release_notes: String::new(),
+        published_at: String::new(),
+        error_message: String::new(),
+    })
 }
 
 pub fn check_async(manual: bool) {

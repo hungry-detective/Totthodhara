@@ -60,6 +60,7 @@ impl PopupWin {
                 }
                 winsys::set_corner_round(self.hwnd, false);
                 winsys::set_border_none(self.hwnd);
+                winsys::dechrome_popup(self.hwnd);
             }
         }
         if !self.hwnd.is_null() && self.applied.map(|a| a.l != rect.l || a.t != rect.t || a.r != rect.r || a.b != rect.b).unwrap_or(true) {

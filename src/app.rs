@@ -33,6 +33,28 @@ pub fn bar_h(size: &str) -> f32 {
     }
 }
 
+/// Top-left that puts a galley's CAPITALS (not its line box) on `c`.
+/// Font line boxes include descender space, so plain centering sits caps high.
+pub fn caps_center(g: &egui::Galley, c: egui::Pos2, size: f32) -> egui::Pos2 {
+    let base = g.rows.first().and_then(|r| r.row.glyphs.first().map(|gl| r.pos.y + gl.pos.y)).unwrap_or(g.size().y * 0.75);
+    pos2(c.x - g.size().x / 2.0, (c.y - (base - 0.35 * size)).round())
+}
+
+/// Baseline offset of a single-row galley from its top.
+pub fn baseline(g: &egui::Galley) -> f32 {
+    g.rows.first().and_then(|r| r.row.glyphs.first().map(|gl| r.pos.y + gl.pos.y)).unwrap_or(g.size().y * 0.75)
+}
+
+/// Paint `t` left-aligned at `x` with its caps/digits centered on `cy`
+/// (the shelf's one shared centerline — icons are centered on it too).
+pub fn text_vc(p: &egui::Painter, x: f32, cy: f32, t: &str, size: f32, family: &str, color: Color32) -> f32 {
+    let g = p.layout_no_wrap(t.to_string(), fid(size, family), color);
+    let at = caps_center(&g, pos2(0.0, cy), size);
+    let w = g.size().x;
+    p.galley(pos2(x, at.y), g, color);
+    w
+}
+
 pub fn text_w(ctx: &egui::Context, text: &str, font: FontId) -> f32 {
     ctx.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, Color32::WHITE).size().x)
 }
@@ -284,6 +306,8 @@ pub struct App {
     title_w: HashMap<(String, bool), f32>,
     meter_drag: Option<MeterDrag>,
     group_rects: HashMap<u8, Rect>,
+    drag_out: Option<i64>,
+    ignore_drops_until: f64,
 }
 
 impl App {
@@ -337,6 +361,8 @@ impl App {
             title_w: HashMap::new(),
             meter_drag: None,
             group_rects: HashMap::new(),
+            drag_out: None,
+            ignore_drops_until: 0.0,
         };
         app.apply_monitor_flags();
         if auto {
@@ -614,6 +640,7 @@ impl App {
                     None => self.set_flash(id, "No title", now),
                 },
                 Event::Update(m) => self.on_update(m, now),
+                Event::Quit => self.exit(),
             }
         }
         if winsys::APPBAR_POS_CHANGED.swap(false, SeqCst) {
@@ -941,6 +968,45 @@ impl App {
         }
     }
 
+    /// Blocking OLE drag of a card; mirrors it to the clipboard first so a
+    /// target that only pastes still works (Qt behavior, no auto-paste).
+    fn run_drag_out(&mut self, ctx: &egui::Context, id: i64) {
+        let Some(c) = self.card(id) else { return };
+        let it = c.it.clone();
+        let kind = c.kind;
+        // The OLE loop blocks repainting, so hide the preview window natively
+        // NOW — otherwise it would stay frozen on screen for the whole drag.
+        if let Some(p) = self.preview.take() {
+            winsys::show_window(p.win.hwnd(), false);
+        }
+        self.hover_card = None;
+        let res = if it.is_file {
+            if !std::path::Path::new(&it.file_path).exists() {
+                let now = ctx.input(|i| i.time);
+                self.set_flash(id, "Not a file", now);
+                return;
+            }
+            let dib = if kind == Kind::Image { image::open(&it.file_path).ok().map(|i| crate::clipboard::dib_bytes(&i.to_rgba8())) } else { None };
+            // Drag a copy carrying the ORIGINAL file name (storage names are
+            // GUIDs — an upload would otherwise show "05876e08-….pdf").
+            let path = crate::storage::temp_copy(&it.file_path, &it.file_name).unwrap_or_else(|| it.file_path.clone());
+            crate::clipboard::set_files(&[path.clone()]);
+            crate::dragdrop::drag_file(self.hwnd, &path, dib)
+        } else {
+            crate::clipboard::set_text(&it.text_content);
+            crate::dragdrop::drag_text(self.hwnd, &it.text_content)
+        };
+        crate::dragdrop::release_mouse(self.hwnd);
+        let now = ctx.input(|i| i.time);
+        self.ignore_drops_until = now + 1.5;
+        match res {
+            Some(true) => self.set_flash(id, "Dropped!", now),
+            Some(false) => self.set_flash(id, "Drag cancelled", now),
+            None => self.set_flash(id, "Can't drag", now),
+        }
+        ctx.request_repaint();
+    }
+
     fn click_card(&mut self, cid: i64, shift: bool, ctrl: bool, now: f64) {
         if ctrl {
             self.delete_card(cid, now);
@@ -991,7 +1057,8 @@ impl eframe::App for App {
             self.app_tex = Some(ctx.load_texture("appicon", ci, egui::TextureOptions::LINEAR));
         }
         let dropped: Vec<String> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_string_lossy().into_owned()).filter(|p| !p.is_empty()).collect());
-        if !dropped.is_empty() {
+        // A card dropped back onto the shelf must not duplicate itself.
+        if !dropped.is_empty() && now > self.ignore_drops_until {
             worker::handle_dropped_files(&self.core, dropped);
         }
         if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::F)) {
@@ -999,6 +1066,9 @@ impl eframe::App for App {
         }
 
         self.draw_bar(ui, now);
+        if let Some(id) = self.drag_out.take() {
+            self.run_drag_out(&ctx, id);
+        }
         self.show_menu(&ctx, now);
         self.show_preview(&ctx);
         self.show_toast(&ctx);
@@ -1170,7 +1240,8 @@ impl App {
                     let resp = ui.interact(r, Id::new("pasteall"), Sense::click());
                     let col = if resp.hovered() { theme::lighter(pal.accent, 1.1) } else { pal.accent };
                     ui.painter().rect_filled(r, 8, col);
-                    ui.painter().text(r.center(), Align2::CENTER_CENTER, "Paste All", fid(12.0, "bold"), Color32::WHITE);
+                    let g = ui.painter().layout_no_wrap("Paste All".into(), fid(12.0, "bold"), Color32::WHITE);
+                    ui.painter().galley(caps_center(&g, r.center(), 12.0), g, Color32::WHITE);
                     if resp.clicked() {
                         let sel: Vec<Item> = self.cards.iter().filter(|c| c.selected).map(|c| c.it.clone()).collect();
                         for c in &mut self.cards {
@@ -1182,7 +1253,8 @@ impl App {
                 Slot::Unselect => {
                     let resp = ui.interact(r, Id::new("unselect"), Sense::click());
                     ui.painter().rect(r, 8, pal.card_bg, Stroke::new(1.0, pal.card_border), StrokeKind::Inside);
-                    ui.painter().text(r.center(), Align2::CENTER_CENTER, "Unselect all", fid(12.0, "bold"), pal.text);
+                    let g = ui.painter().layout_no_wrap("Unselect all".into(), fid(12.0, "bold"), pal.text);
+                    ui.painter().galley(caps_center(&g, r.center(), 12.0), g, pal.text);
                     if resp.clicked() {
                         for c in &mut self.cards {
                             c.selected = false;
@@ -1311,7 +1383,7 @@ impl App {
             *x += sz.x + 4.0;
         };
         let text = |x: &mut f32, t: &str, size: f32, w: f32| {
-            p.text(pos2(*x, cy), Align2::LEFT_CENTER, t, fid(size, ""), pal.text);
+            text_vc(p, *x, cy, t, size, "", pal.text);
             *x += w + 4.0;
         };
         match g {
@@ -1329,15 +1401,25 @@ impl App {
                 text(&mut x, &down, 14.0, 62.0);
             }
             Group::Clock => {
+                // Tag (12px) sits on the SAME baseline as its time (13px):
+                // centering each size separately rounds them 1px apart.
+                let clock = |x: &mut f32, tag: &str, time: &str| {
+                    icon(x, Meter::Clock);
+                    let tg = p.layout_no_wrap(time.to_string(), fid(13.0, ""), pal.text);
+                    let ty = caps_center(&tg, pos2(0.0, cy), 13.0).y;
+                    let tb = ty + baseline(&tg);
+                    let gg = p.layout_no_wrap(tag.to_string(), fid(12.0, ""), pal.text);
+                    let gy = tb - baseline(&gg);
+                    p.galley(pos2(*x, gy), gg, pal.text);
+                    *x += 30.0 + 4.0;
+                    p.galley(pos2(*x, ty), tg, pal.text);
+                    *x += 58.0 + 4.0;
+                };
                 if self.s.show_clock1 {
-                    icon(&mut x, Meter::Clock);
-                    text(&mut x, &self.clocks.a_tag, 12.0, 30.0);
-                    text(&mut x, &self.clocks.a_text, 13.0, 58.0);
+                    clock(&mut x, &self.clocks.a_tag, &self.clocks.a_text);
                 }
                 if self.s.show_clock2 {
-                    icon(&mut x, Meter::Clock);
-                    text(&mut x, &self.clocks.b_tag, 12.0, 30.0);
-                    text(&mut x, &self.clocks.b_text, 13.0, 58.0);
+                    clock(&mut x, &self.clocks.b_tag, &self.clocks.b_text);
                 }
             }
         }
@@ -1582,7 +1664,17 @@ impl App {
                 continue;
             }
             let hit = rect.intersect(area);
-            let resp = ui.interact(hit, Id::new(("card", id)), Sense::click());
+            let resp = ui.interact(hit, Id::new(("card", id)), Sense::click_and_drag());
+            // Drag OUT to another app: 16px threshold, never with Ctrl/Shift
+            // (those are delete/select clicks).
+            if resp.dragged_by(egui::PointerButton::Primary) && c.removing.is_none() && self.drag_out.is_none() {
+                let far = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.latest_pos()).map(|(a, b)| a.distance(b) > 16.0).unwrap_or(false));
+                // Only the card the press actually started on may drag.
+                let on_me = ctx.input(|i| i.pointer.press_origin()).map(|o| hit.contains(o)).unwrap_or(false);
+                if far && on_me && !winsys::shift_down() && !winsys::ctrl_down() {
+                    self.drag_out = Some(id);
+                }
+            }
             let removing = c.removing.is_some();
             let mut open_hover = false;
             if c.kind == Kind::Url && c.flash.is_none() {
@@ -1615,9 +1707,11 @@ impl App {
         let clip = Rect::from_x_y_ranges(area.x_range(), ui.max_rect().y_range());
         ui.painter().with_clip_rect(clip).add(crate::fade::faded(&ctx, shapes, area, ppp, 40.0, kl, kr));
 
-        // Hover preview after 350ms (not for color swatches).
+        // Hover preview after 350ms (not for color swatches). Never while a
+        // button is held (pressing / dragging a card) or a drag is starting.
+        let pressing = ctx.input(|i| i.pointer.any_down()) || self.drag_out.is_some();
         match hovered {
-            Some((id, rect)) if self.menu.is_none() => {
+            Some((id, rect)) if self.menu.is_none() && !pressing => {
                 let ax = self.screen_x(rect.center().x);
                 if self.hover_card.map(|h| h.0 != id).unwrap_or(true) {
                     self.hover_card = Some((id, now, ax));
@@ -1698,10 +1792,15 @@ impl App {
         let cy = rect.center().y;
         let small = self.s.bar_size == "Small";
         let mut x = rect.left() + 9.0;
-        let ig = ctx.fonts_mut(|f| f.layout_no_wrap(c.pos.to_string(), fid(if small { 12.0 } else { 13.0 }, "bold"), pal.text));
-        shapes.push(Shape::galley(pos2(x, cy - ig.size().y / 2.0), ig, pal.text));
-        x += 14.0 + 4.0;
         let flashing = c.flash.as_ref().map(|f| f.0.clone());
+        // While a status shows ("Dropped!", "Pasted!"…) it owns the whole card:
+        // number and icon step aside so the message sits dead-center.
+        if flashing.is_none() {
+            let ig = ctx.fonts_mut(|f| f.layout_no_wrap(c.pos.to_string(), fid(if small { 12.0 } else { 13.0 }, "bold"), pal.text));
+            let isz = if small { 12.0 } else { 13.0 };
+            shapes.push(Shape::galley(pos2(x, caps_center(&ig, pos2(0.0, cy), isz).y), ig, pal.text));
+        }
+        x += 14.0 + 4.0;
         if c.kind != Kind::Text {
             if flashing.is_none() {
                 self.paint_kind(ctx, &mut shapes, c, Rect::from_min_size(pos2(x, rect.top()), vec2(28.0, rect.height())));
@@ -1712,14 +1811,14 @@ impl App {
         let tsize = if small { 11.0 } else { 13.0 };
         match &flashing {
             Some(t) => {
-                // Feedback replaces the title, bold + centered.
-                let g = elide(ctx, t, fid(tsize, "bold"), pal.text, right - x);
-                let gx = x + ((right - x) - g.size().x).max(0.0) / 2.0;
-                shapes.push(Shape::galley(pos2(gx, cy - g.size().y / 2.0), g, pal.text));
+                // Status: bold, centered on the whole card (both axes).
+                let g = elide(ctx, t, fid(tsize, "bold"), pal.text, rect.width() - 16.0);
+                let at = caps_center(&g, rect.center(), tsize);
+                shapes.push(Shape::galley(pos2(at.x.round(), at.y), g, pal.text));
             }
             None => {
                 let g = elide(ctx, &c.title, fid(tsize, ""), pal.text, (right - x).min(130.0));
-                shapes.push(Shape::galley(pos2(x, cy - g.size().y / 2.0), g, pal.text));
+                shapes.push(Shape::galley(pos2(x, caps_center(&g, pos2(0.0, cy), tsize).y), g, pal.text));
             }
         }
         if c.kind == Kind::Url && flashing.is_none() {
@@ -1775,7 +1874,7 @@ impl App {
             let r = Rect::from_center_size(ctr, vec2(26.0, 16.0));
             out.push(Shape::rect_stroke(r, 4, Stroke::new(1.0, pal.text), StrokeKind::Inside));
             let g = elide(ctx, text, fid(8.0, "bold"), pal.text, 24.0);
-            out.push(Shape::galley(ctr - g.size() / 2.0, g, pal.text));
+            out.push(Shape::galley(caps_center(&g, ctr, 8.0), g, pal.text));
         };
         match c.kind {
             Kind::Image => {

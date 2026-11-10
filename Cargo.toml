@@ -1,6 +1,6 @@
 [package]
 name = "totthodhara"
-version = "2.0.1"
+version = "2.0.2"
 edition = "2021"
 description = "Totthodhara - floating clipboard shelf (Rust + egui port)"
 build = "build.rs"
@@ -29,6 +29,7 @@ features = [
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Ole",
     "Win32_System_SystemServices",
     "Win32_System_DataExchange",

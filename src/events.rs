@@ -21,6 +21,8 @@ pub enum Event {
     Status(String),
     Title(i64, Option<String>),
     Update(crate::update::UpdateMsg),
+    /// Another (newer) instance asked us to exit cleanly.
+    Quit,
 }
 
 struct Sink {

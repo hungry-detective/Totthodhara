@@ -187,6 +187,10 @@ unsafe extern "system" fn wndproc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> 
             LRESULT(1)
         }
         _ => {
+            if msg != 0 && msg == crate::winsys::quit_message() {
+                events::send(Event::Quit);
+                return LRESULT(0);
+            }
             if msg != 0 && msg == TASKBAR_CREATED.load(SeqCst) {
                 add_tray(h, false);
                 return LRESULT(0);

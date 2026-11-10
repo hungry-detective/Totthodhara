@@ -5,6 +5,7 @@ mod app;
 mod clipboard;
 mod clock;
 mod db;
+mod dragdrop;
 mod tools;
 mod events;
 mod fade;
@@ -40,9 +41,18 @@ fn main() {
     // TOTTHODHARA_DEV=1: side-by-side testing (no kill, no mutex).
     let dev = std::env::var("TOTTHODHARA_DEV").is_ok();
     if !dev {
-        winsys::kill_old_instances();
+        winsys::replace_old_instances();
     }
-    if !dev && !winsys::acquire_single_instance() {
+    // The replaced instance may still be releasing the mutex for a moment.
+    let mut got = dev;
+    for _ in 0..30 {
+        if got || winsys::acquire_single_instance() {
+            got = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    if !got {
         winsys::message_box("Totthodhara", "Totthodhara is already running.");
         return;
     }

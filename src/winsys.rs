@@ -367,7 +367,57 @@ pub fn appbar_set_pos(h: Hwnd, top: bool, height_px: i32, visible: bool) -> IRec
 static mut OLD_PROC: isize = 0;
 pub static APPBAR_POS_CHANGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// Previous window procs of popup windows we de-chromed (hwnd → proc).
+static POPUP_PROCS: std::sync::Mutex<Vec<(isize, isize)>> = std::sync::Mutex::new(Vec::new());
+
+/// winit's "undecorated shadow" hack insets the client area by 1px
+/// (`rgrc.top += 1; rgrc.bottom += 1` in WM_NCCALCSIZE) — its own source
+/// admits "a small black 1px border on the top". That was the seam on top
+/// of the shelf and pushed every glyph 1px low. Claiming the whole window
+/// as client area restores pixel-exact layout.
+fn nccalc_full(msg: u32, wp: WPARAM) -> bool {
+    msg == WM_NCCALCSIZE && wp.0 != 0
+}
+
+unsafe extern "system" fn popup_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if nccalc_full(msg, wp) {
+        return LRESULT(0);
+    }
+    let old = POPUP_PROCS.lock().ok().and_then(|v| v.iter().find(|e| e.0 == h.0 as isize).map(|e| e.1)).unwrap_or(0);
+    if old == 0 {
+        return DefWindowProcW(h, msg, wp, lp);
+    }
+    let old: WNDPROC = std::mem::transmute(old);
+    CallWindowProcW(old, h, msg, wp, lp)
+}
+
+/// No DWM non-client rendering (no frame shadow halo around rounded,
+/// transparent windows) and a full-size client area.
+fn dechrome_now(h: Hwnd) {
+    unsafe {
+        let disabled: u32 = 1; // DWMNCRP_DISABLED
+        let _ = DwmSetWindowAttribute(h.h(), DWMWINDOWATTRIBUTE(2), &disabled as *const _ as *const c_void, 4);
+        let _ = SetWindowPos(h.h(), None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
+/// Apply the de-chrome fix to a popup / dialog window (menus, previews,
+/// toast, settings).
+pub fn dechrome_popup(h: Hwnd) {
+    unsafe {
+        let prev = SetWindowLongPtrW(h.h(), GWLP_WNDPROC, popup_proc as usize as isize);
+        if let Ok(mut v) = POPUP_PROCS.lock() {
+            v.retain(|e| IsWindow(Some(HWND(e.0 as *mut c_void))).as_bool());
+            v.push((h.0, prev));
+        }
+    }
+    dechrome_now(h);
+}
+
 unsafe extern "system" fn root_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if nccalc_full(msg, wp) {
+        return LRESULT(0);
+    }
     if msg == APPBAR_CALLBACK {
         // ABN_POSCHANGED = 1. ABN_FULLSCREENAPP (2) deliberately ignored
         // (registration itself fires it — see WPF HwndHandler note).
@@ -395,6 +445,7 @@ pub fn subclass_root(h: Hwnd) {
         let prev = SetWindowLongPtrW(h.h(), GWLP_WNDPROC, root_proc as usize as isize);
         OLD_PROC = prev;
     }
+    dechrome_now(h);
 }
 
 // ───────────────────────── fullscreen detection ─────────────────────────
@@ -749,7 +800,95 @@ pub fn acquire_single_instance() -> bool {
     }
 }
 
+/// Registered "please quit" message every Totthodhara build ≥2.0.2 obeys.
+pub fn quit_message() -> u32 {
+    static M: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *M.get_or_init(|| {
+        let n = wide("Totthodhara.Quit.v1");
+        unsafe { RegisterWindowMessageW(PCWSTR(n.as_ptr())) }
+    })
+}
+
+unsafe extern "system" fn collect_proc(hwnd: HWND, lp: LPARAM) -> BOOL {
+    let v = &mut *(lp.0 as *mut (u32, Vec<isize>));
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(hwnd, Some(&mut pid));
+    if pid == v.0 {
+        v.1.push(hwnd.0 as isize);
+    }
+    BOOL(1)
+}
+
+fn windows_of(pid: u32) -> Vec<isize> {
+    let mut v: (u32, Vec<isize>) = (pid, Vec::new());
+    unsafe {
+        let _ = EnumWindows(Some(collect_proc), LPARAM(&mut v as *mut _ as isize));
+    }
+    v.1
+}
+
+/// One shelf only. Ask older instances (any edition) to quit CLEANLY so they
+/// release their AppBar reservation; force-kill only as a fallback, then
+/// remove the reservation a killed shelf leaked (otherwise the work area keeps
+/// an empty strip and the new shelf stacks above it — "two shelves").
+pub fn replace_old_instances() {
+    use windows::Win32::System::Diagnostics::ToolHelp::*;
+    unsafe {
+        let me = own_pid();
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return };
+        let mut e = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+        let mut pids = Vec::new();
+        if Process32FirstW(snap, &mut e).is_ok() {
+            loop {
+                let name = from_wide(&e.szExeFile).to_lowercase();
+                if e.th32ProcessID != me && (name == "totthodhara.exe" || name == "clipdroppro.exe") {
+                    pids.push(e.th32ProcessID);
+                }
+                if Process32NextW(snap, &mut e).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snap);
+        // Only replace instances started BEFORE us: two copies launched at
+        // the same moment must not kill each other (newest wins, one shelf).
+        let created = |h: HANDLE| -> u64 {
+            let (mut c, mut e, mut k, mut u) = (FILETIME::default(), FILETIME::default(), FILETIME::default(), FILETIME::default());
+            let _ = GetProcessTimes(h, &mut c, &mut e, &mut k, &mut u);
+            ((c.dwHighDateTime as u64) << 32) | c.dwLowDateTime as u64
+        };
+        let my_start = created(GetCurrentProcess());
+        let qm = quit_message();
+        for pid in pids {
+            if let Ok(h) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+                let older = created(h) <= my_start;
+                let _ = CloseHandle(h);
+                if !older {
+                    continue;
+                }
+            }
+            let wins = windows_of(pid);
+            for &h in &wins {
+                let _ = PostMessageW(Some(HWND(h as *mut c_void)), qm, WPARAM(0), LPARAM(0));
+            }
+            if let Ok(p) = OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, false, pid) {
+                if WaitForSingleObject(p, 2500) != WAIT_OBJECT_0 {
+                    let _ = TerminateProcess(p, 0);
+                    WaitForSingleObject(p, 3000);
+                }
+                let _ = CloseHandle(p);
+            }
+            // Clean any AppBar the old process left registered.
+            for h in wins {
+                let mut a = APPBARDATA { cbSize: std::mem::size_of::<APPBARDATA>() as u32, hWnd: HWND(h as *mut c_void), ..Default::default() };
+                SHAppBarMessage(ABM_REMOVE, &mut a);
+            }
+        }
+    }
+}
+
 /// Kill older instances by process name (Totthodhara / ClipDropPro).
+#[allow(dead_code)]
 pub fn kill_old_instances() {
     use windows::Win32::System::Diagnostics::ToolHelp::*;
     unsafe {

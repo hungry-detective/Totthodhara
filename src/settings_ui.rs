@@ -66,6 +66,7 @@ impl SettingsWin {
             self.hwnd = winsys::find_own_window(&self.title);
             if !self.hwnd.is_null() {
                 winsys::set_border_none(self.hwnd);
+                winsys::dechrome_popup(self.hwnd);
                 winsys::set_corner_round(self.hwnd, false);
                 let (mon, _) = winsys::monitor_of_point(winsys::cursor_pos().0, winsys::cursor_pos().1);
                 let dpi = winsys::dpi_of_window(self.hwnd);

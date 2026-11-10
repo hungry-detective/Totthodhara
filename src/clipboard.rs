@@ -179,7 +179,7 @@ fn hdrop_bytes(files: &[String]) -> Vec<u8> {
     v
 }
 
-fn dib_bytes(img: &image::RgbaImage) -> Vec<u8> {
+pub fn dib_bytes(img: &image::RgbaImage) -> Vec<u8> {
     let (w, h) = img.dimensions();
     let mut v = Vec::with_capacity(40 + (w * h * 4) as usize);
     v.extend_from_slice(&40u32.to_le_bytes());
