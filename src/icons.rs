@@ -135,11 +135,22 @@ impl Meter {
 }
 
 /// Draw a MeterIcon with its top-left at `o` (canvas units = px).
-pub fn draw_meter(p: &Painter, o: Pos2, kind: Meter, ink: Color32) {
-    p.extend(meter_shapes(o, kind, ink));
+pub fn draw_meter(p: &Painter, o: Pos2, kind: Meter, ink: Color32, scale: f32) {
+    p.extend(meter_shapes(o, kind, ink, scale));
 }
 
-pub fn meter_shapes(o: Pos2, kind: Meter, ink: Color32) -> Vec<Shape> {
+/// Shapes are authored on the 18px canvas and scaled by `scale` (bar size),
+/// strokes included, so icons stay proportional to the text beside them.
+pub fn meter_shapes(o: Pos2, kind: Meter, ink: Color32, scale: f32) -> Vec<Shape> {
+    let mut out = meter_shapes_unit(Pos2::ZERO, kind, ink);
+    let tr = egui::emath::TSTransform::new(o.to_vec2(), scale);
+    for s in &mut out {
+        s.transform(tr);
+    }
+    out
+}
+
+fn meter_shapes_unit(o: Pos2, kind: Meter, ink: Color32) -> Vec<Shape> {
     let mut out: Vec<Shape> = Vec::new();
     let at = |x: f32, y: f32| o + Vec2::new(x, y);
     let mut line = |out: &mut Vec<Shape>, pts: &[(f32, f32)], w: f32| {

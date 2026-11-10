@@ -383,6 +383,14 @@ unsafe extern "system" fn popup_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
     if nccalc_full(msg, wp) {
         return LRESULT(0);
     }
+    // There is no non-client area left: never let Windows paint a frame or
+    // caption on activation changes (that was the title-bar blink).
+    if msg == WM_NCPAINT {
+        return LRESULT(0);
+    }
+    if msg == WM_NCACTIVATE {
+        return LRESULT(1);
+    }
     let old = POPUP_PROCS.lock().ok().and_then(|v| v.iter().find(|e| e.0 == h.0 as isize).map(|e| e.1)).unwrap_or(0);
     if old == 0 {
         return DefWindowProcW(h, msg, wp, lp);
@@ -391,10 +399,17 @@ unsafe extern "system" fn popup_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) 
     CallWindowProcW(old, h, msg, wp, lp)
 }
 
-/// No DWM non-client rendering (no frame shadow halo around rounded,
-/// transparent windows) and a full-size client area.
+/// Re-run WM_NCCALCSIZE so the full-size client area takes effect.
+/// NOTE: with NC rendering disabled, Windows paints a CLASSIC caption (icon,
+/// title, min/max/close) on WS_CAPTION windows whenever it repaints the
+/// frame (activation) — so every subclass proc must swallow WM_NCPAINT and
+/// WM_NCACTIVATE, or the title bar blinks over the content.
 fn dechrome_now(h: Hwnd) {
     unsafe {
+        // DWM non-client rendering OFF: no frame/shadow composited around the
+        // transparent pill/menus (with it ON a full-client transparent window
+        // renders black). The classic caption Windows would then paint is
+        // blocked in the procs (WM_NCPAINT / WM_NCACTIVATE swallowed).
         let disabled: u32 = 1; // DWMNCRP_DISABLED
         let _ = DwmSetWindowAttribute(h.h(), DWMWINDOWATTRIBUTE(2), &disabled as *const _ as *const c_void, 4);
         let _ = SetWindowPos(h.h(), None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
@@ -417,6 +432,12 @@ pub fn dechrome_popup(h: Hwnd) {
 unsafe extern "system" fn root_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     if nccalc_full(msg, wp) {
         return LRESULT(0);
+    }
+    if msg == WM_NCPAINT {
+        return LRESULT(0);
+    }
+    if msg == WM_NCACTIVATE {
+        return LRESULT(1);
     }
     if msg == APPBAR_CALLBACK {
         // ABN_POSCHANGED = 1. ABN_FULLSCREENAPP (2) deliberately ignored

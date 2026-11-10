@@ -303,7 +303,7 @@ pub struct App {
     painted_once: bool,
     glass_key: String,
     tray_click_at: Option<f64>,
-    title_w: HashMap<(String, bool), f32>,
+    title_w: HashMap<(String, u32), f32>,
     meter_drag: Option<MeterDrag>,
     group_rects: HashMap<u8, Rect>,
     drag_out: Option<i64>,
@@ -365,6 +365,12 @@ impl App {
             ignore_drops_until: 0.0,
         };
         app.apply_monitor_flags();
+        // `Totthodhara.exe --settings` opens Settings on start (Qt parity;
+        // also used for screen-free verification).
+        let mut app = app;
+        if std::env::args().any(|a| a == "--settings") {
+            app.settings_win = Some(crate::settings_ui::SettingsWin::new(0, &app.clocks));
+        }
         if auto {
             crate::update::check_async(false);
         }
@@ -378,6 +384,11 @@ impl App {
 
     pub fn bar(&self) -> f32 {
         bar_h(&self.s.bar_size)
+    }
+    /// Content scale: everything on the shelf (fonts, icons, gaps, widths)
+    /// follows the bar height so Small/Medium/Large stay proportional.
+    pub fn k(&self) -> f32 {
+        self.bar() / 28.0
     }
     pub fn card_h(&self) -> f32 {
         self.bar() - 5.0
@@ -483,6 +494,16 @@ impl App {
         winsys::subclass_root(h);
         winsys::make_noactivate_tool(h);
         winsys::set_border_none(h);
+        if let Some((kind, _)) = showcase() {
+            // README showcase: render off-screen, never reserve screen space.
+            let dpi = winsys::dpi_of_window(h);
+            let (w, hh) = if kind == "bar" { (1366.0, self.bar()) } else { (720.0, 560.0) };
+            winsys::move_window(h, -6000, 0, (w * dpi) as i32, (hh * dpi + 0.5) as i32, false);
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(w, hh)));
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(-6000.0, 0.0)));
+            ctx.request_repaint();
+            return;
+        }
         winsys::appbar_register(h);
         self.place_shelf();
         ctx.request_repaint();
@@ -980,6 +1001,9 @@ impl App {
             winsys::show_window(p.win.hwnd(), false);
         }
         self.hover_card = None;
+        // The OLE loop blocks this frame; egui's frame clock still reads the
+        // time the drag STARTED, so time the status from when it ENDED.
+        let t0 = std::time::Instant::now();
         let res = if it.is_file {
             if !std::path::Path::new(&it.file_path).exists() {
                 let now = ctx.input(|i| i.time);
@@ -997,7 +1021,7 @@ impl App {
             crate::dragdrop::drag_text(self.hwnd, &it.text_content)
         };
         crate::dragdrop::release_mouse(self.hwnd);
-        let now = ctx.input(|i| i.time);
+        let now = ctx.input(|i| i.time) + t0.elapsed().as_secs_f64();
         self.ignore_drops_until = now + 1.5;
         match res {
             Some(true) => self.set_flash(id, "Dropped!", now),
@@ -1036,6 +1060,41 @@ impl App {
 
 // ───────────────────────── eframe::App ─────────────────────────
 
+/// `TOTTHODHARA_SHOWCASE=bar|settings0..4:<out.png>` renders one frame for the README.
+fn showcase() -> Option<(String, String)> {
+    let v = std::env::var("TOTTHODHARA_SHOWCASE").ok()?;
+    let (k, o) = v.split_once(':')?;
+    Some((k.to_string(), o.to_string()))
+}
+
+impl App {
+    fn run_showcase(&mut self, ui: &mut Ui, now: f64, kind: &str, out: String) {
+        static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        if kind == "bar" {
+            self.draw_bar(ui, now);
+        } else {
+            let sec = kind.trim_start_matches("settings").parse().unwrap_or(0);
+            let mut w = self.settings_win.take().unwrap_or_else(|| crate::settings_ui::SettingsWin::new(sec, &self.clocks));
+            w.section = sec;
+            crate::settings_ui::style(ui, &self.pal);
+            w.body(ui, self, now);
+            self.settings_win = Some(w);
+        }
+        let ctx = ui.ctx().clone();
+        ctx.request_repaint();
+        if FRAMES.fetch_add(1, SeqCst) == 90 {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::ScreenshotCallback::new(move |img| {
+                let [w, h] = img.size;
+                let raw: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+                if let Some(buf) = image::RgbaImage::from_raw(w as u32, h as u32, raw) {
+                    let _ = buf.save(&out);
+                }
+                std::process::exit(0);
+            })));
+        }
+    }
+}
+
 impl eframe::App for App {
     fn clear_color(&self, _v: &egui::Visuals) -> [f32; 4] {
         [0.0, 0.0, 0.0, 0.0]
@@ -1065,6 +1124,10 @@ impl eframe::App for App {
             self.open_search();
         }
 
+        if let Some((kind, out)) = showcase() {
+            self.run_showcase(ui, now, &kind, out);
+            return;
+        }
         self.draw_bar(ui, now);
         if let Some(id) = self.drag_out.take() {
             self.run_drag_out(&ctx, id);
@@ -1139,7 +1202,8 @@ impl App {
     }
 
     fn group_w(&self, g: Group) -> f32 {
-        let inner = match g {
+        let k = self.k();
+        let inner = k * match g {
             Group::Hw => 18.0 + 4.0 + 32.0 + 4.0 + 24.0 + 4.0 + 28.0,
             Group::Net => 18.0 + 4.0 + 62.0 + 4.0 + 18.0 + 4.0 + 62.0,
             Group::Clock => {
@@ -1151,7 +1215,7 @@ impl App {
                 }
             }
         };
-        inner + if self.s.pill_meters { 20.0 } else { 0.0 }
+        inner + if self.s.pill_meters { 20.0 * k } else { 0.0 }
     }
 
     fn selected_count(&self) -> usize {
@@ -1159,14 +1223,15 @@ impl App {
     }
 
     fn slot_w(&self, ctx: &egui::Context, s: &Slot) -> Option<f32> {
+        let k = self.k();
         Some(match s {
             Slot::Spacer | Slot::Strip => return None,
-            Slot::Meters(gs) => gs.iter().map(|g| self.group_w(*g)).sum::<f32>() + 6.0 * (gs.len().saturating_sub(1)) as f32,
-            Slot::ChevL | Slot::ChevR => 30.0,
-            Slot::Search => 130.0,
-            Slot::PasteAll => text_w(ctx, "Paste All", fid(12.0, "bold")) + 24.0,
-            Slot::Unselect => text_w(ctx, "Unselect all", fid(12.0, "bold")) + 24.0,
-            Slot::Gear => 32.0,
+            Slot::Meters(gs) => gs.iter().map(|g| self.group_w(*g)).sum::<f32>() + 6.0 * k * (gs.len().saturating_sub(1)) as f32,
+            Slot::ChevL | Slot::ChevR => 30.0 * k,
+            Slot::Search => 130.0 * k,
+            Slot::PasteAll => text_w(ctx, "Paste All", fid(12.0 * k, "bold")) + 24.0 * k,
+            Slot::Unselect => text_w(ctx, "Unselect all", fid(12.0 * k, "bold")) + 24.0 * k,
+            Slot::Gear => 32.0 * k,
         })
     }
 
@@ -1213,7 +1278,8 @@ impl App {
         let inner_w = full.width() - 14.0;
         let fixed: f32 = slots.iter().filter_map(|s| self.slot_w(&ctx, s)).sum();
         let fills = slots.iter().filter(|s| self.slot_w(&ctx, s).is_none()).count().max(1) as f32;
-        let gaps = 8.0 * (slots.len().saturating_sub(1)) as f32;
+        let kk = self.k();
+        let gaps = 8.0 * kk * (slots.len().saturating_sub(1)) as f32;
         let fill_w = ((inner_w - fixed - gaps) / fills).max(0.0);
         let cy = full.center().y;
         let ch = self.card_h();
@@ -1229,7 +1295,7 @@ impl App {
                     for g in gs {
                         let gw = self.group_w(*g);
                         self.draw_group(ui, *g, Rect::from_min_size(pos2(gx, r.top()), vec2(gw, ch)), now);
-                        gx += gw + 6.0;
+                        gx += gw + 6.0 * kk;
                     }
                 }
                 Slot::ChevL => chev.push((true, r)),
@@ -1240,8 +1306,8 @@ impl App {
                     let resp = ui.interact(r, Id::new("pasteall"), Sense::click());
                     let col = if resp.hovered() { theme::lighter(pal.accent, 1.1) } else { pal.accent };
                     ui.painter().rect_filled(r, 8, col);
-                    let g = ui.painter().layout_no_wrap("Paste All".into(), fid(12.0, "bold"), Color32::WHITE);
-                    ui.painter().galley(caps_center(&g, r.center(), 12.0), g, Color32::WHITE);
+                    let g = ui.painter().layout_no_wrap("Paste All".into(), fid(12.0 * kk, "bold"), Color32::WHITE);
+                    ui.painter().galley(caps_center(&g, r.center(), 12.0 * kk), g, Color32::WHITE);
                     if resp.clicked() {
                         let sel: Vec<Item> = self.cards.iter().filter(|c| c.selected).map(|c| c.it.clone()).collect();
                         for c in &mut self.cards {
@@ -1253,8 +1319,8 @@ impl App {
                 Slot::Unselect => {
                     let resp = ui.interact(r, Id::new("unselect"), Sense::click());
                     ui.painter().rect(r, 8, pal.card_bg, Stroke::new(1.0, pal.card_border), StrokeKind::Inside);
-                    let g = ui.painter().layout_no_wrap("Unselect all".into(), fid(12.0, "bold"), pal.text);
-                    ui.painter().galley(caps_center(&g, r.center(), 12.0), g, pal.text);
+                    let g = ui.painter().layout_no_wrap("Unselect all".into(), fid(12.0 * kk, "bold"), pal.text);
+                    ui.painter().galley(caps_center(&g, r.center(), 12.0 * kk), g, pal.text);
                     if resp.clicked() {
                         for c in &mut self.cards {
                             c.selected = false;
@@ -1263,11 +1329,11 @@ impl App {
                     }
                 }
                 Slot::Gear => {
-                    let br = Rect::from_center_size(pos2(r.center().x, cy), vec2(32.0, 24.0));
+                    let br = Rect::from_center_size(pos2(r.center().x, cy), vec2(32.0, 24.0) * kk);
                     let resp = ui.interact(br, Id::new("gear"), Sense::click());
                     let k = ctx.animate_bool_with_time(Id::new("gear-h"), resp.hovered(), 0.12);
-                    ui.painter().rect_filled(Rect::from_center_size(br.center(), vec2(30.0, 24.0)), 8, theme::alpha(pal.text, 0.12 * k));
-                    ui.painter().text(br.center(), Align2::CENTER_CENTER, icons::SETTINGS.to_string(), fid(16.0, "icons"), pal.text);
+                    ui.painter().rect_filled(Rect::from_center_size(br.center(), vec2(30.0, 24.0) * kk), (8.0 * kk) as u8, theme::alpha(pal.text, 0.12 * k));
+                    ui.painter().text(br.center(), Align2::CENTER_CENTER, icons::SETTINGS.to_string(), fid(16.0 * kk, "icons"), pal.text);
                     if resp.clicked() {
                         if matches!(self.menu.as_ref().map(|m| m.kind), Some(MenuKind::Gear)) {
                             self.menu = None;
@@ -1285,7 +1351,7 @@ impl App {
                 }
                 Slot::Spacer => {}
             }
-            x += w + 8.0;
+            x += w + 8.0 * kk;
         }
         self.update_meter_drag(ui, full);
         if !hide {
@@ -1308,12 +1374,13 @@ impl App {
         let pal = self.pal.clone();
         let can = if left { self.scroll > 4.0 } else { self.scroll < self.max_scroll - 4.0 };
         let c = r.center();
-        let hit = Rect::from_center_size(c, vec2(22.0, 22.0));
+        let kk = self.k();
+        let hit = Rect::from_center_size(c, vec2(22.0, 22.0) * kk);
         let resp = ui.interact(hit, Id::new(("chev", left)), Sense::click());
         let hov = ctx.animate_bool_with_time(Id::new(("chev-h", left)), resp.hovered(), 0.15);
         let sc = 1.0 + 0.08 * ease_out(ctx.animate_bool_with_time(Id::new(("chev-s", left)), resp.hovered(), 0.13));
         let op = 0.35 + 0.65 * ctx.animate_bool_with_time(Id::new(("chev-o", left)), can, 0.15);
-        let rad = 11.0 * sc;
+        let rad = 11.0 * kk * sc;
         let style = self.s.pill_style.as_str();
         let fill = match style {
             "tint" | "borderless" => theme::alpha(pal.accent, 0.08),
@@ -1329,7 +1396,7 @@ impl App {
         if style != "borderless" {
             p.circle_stroke(c, rad - 0.5, Stroke::new(1.0, theme::fade(border, op)));
         }
-        p.text(c, Align2::CENTER_CENTER, if left { icons::CHEVRON_LEFT } else { icons::CHEVRON_RIGHT }.to_string(), fid(12.0 * sc, "icons"), theme::fade(pal.text, op));
+        p.text(c, Align2::CENTER_CENTER, if left { icons::CHEVRON_LEFT } else { icons::CHEVRON_RIGHT }.to_string(), fid(12.0 * kk * sc, "icons"), theme::fade(pal.text, op));
         if resp.clicked() && can {
             let step = (strip_w * 0.6).max(120.0);
             let to = if left { (self.scroll - step).max(0.0) } else { (self.scroll + step).min(self.max_scroll) };
@@ -1339,6 +1406,7 @@ impl App {
 
     fn draw_search(&mut self, ui: &mut Ui, r: Rect) {
         let pal = self.pal.clone();
+        let fk = self.k();
         let id = Id::new("search-box");
         let focused = ui.ctx().memory(|m| m.has_focus(id));
         ui.painter().rect(r, 8, pal.card_bg, Stroke::new(1.0, if focused { pal.accent } else { pal.card_border }), StrokeKind::Inside);
@@ -1347,7 +1415,7 @@ impl App {
             egui::TextEdit::singleline(&mut self.search_text)
                 .id(id)
                 .frame(egui::Frame::NONE)
-                .font(fid(12.0, ""))
+                .font(fid(12.0 * fk, ""))
                 .text_color(pal.text)
                 .hint_text(egui::RichText::new("Search…").color(pal.muted))
                 .vertical_align(egui::Align::Center),
@@ -1376,15 +1444,16 @@ impl App {
             }
             p.rect(r, rad, fill, Stroke::new(bw, border), StrokeKind::Inside);
         }
-        let mut x = r.left() + if pill { 10.0 } else { 0.0 };
-        let icon = |x: &mut f32, k: Meter| {
-            let sz = k.size();
-            icons::draw_meter(p, pos2(*x, cy - sz.y / 2.0), k, pal.text);
-            *x += sz.x + 4.0;
+        let k = self.k();
+        let mut x = r.left() + if pill { 10.0 * k } else { 0.0 };
+        let icon = |x: &mut f32, m: Meter| {
+            let sz = m.size() * k;
+            icons::draw_meter(p, pos2(*x, cy - sz.y / 2.0), m, pal.text, k);
+            *x += sz.x + 4.0 * k;
         };
         let text = |x: &mut f32, t: &str, size: f32, w: f32| {
-            text_vc(p, *x, cy, t, size, "", pal.text);
-            *x += w + 4.0;
+            text_vc(p, *x, cy, t, size * k, "", pal.text);
+            *x += (w + 4.0) * k;
         };
         match g {
             Group::Hw => {
@@ -1405,15 +1474,15 @@ impl App {
                 // centering each size separately rounds them 1px apart.
                 let clock = |x: &mut f32, tag: &str, time: &str| {
                     icon(x, Meter::Clock);
-                    let tg = p.layout_no_wrap(time.to_string(), fid(13.0, ""), pal.text);
-                    let ty = caps_center(&tg, pos2(0.0, cy), 13.0).y;
+                    let tg = p.layout_no_wrap(time.to_string(), fid(13.0 * k, ""), pal.text);
+                    let ty = caps_center(&tg, pos2(0.0, cy), 13.0 * k).y;
                     let tb = ty + baseline(&tg);
-                    let gg = p.layout_no_wrap(tag.to_string(), fid(12.0, ""), pal.text);
-                    let gy = tb - baseline(&gg);
+                    let gg = p.layout_no_wrap(tag.to_string(), fid(12.0 * k, ""), pal.text);
+                    let gy = (tb - baseline(&gg)).round();
                     p.galley(pos2(*x, gy), gg, pal.text);
-                    *x += 30.0 + 4.0;
+                    *x += (30.0 + 4.0) * k;
                     p.galley(pos2(*x, ty), tg, pal.text);
-                    *x += 58.0 + 4.0;
+                    *x += (58.0 + 4.0) * k;
                 };
                 if self.s.show_clock1 {
                     clock(&mut x, &self.clocks.a_tag, &self.clocks.a_text);
@@ -1434,9 +1503,6 @@ impl App {
         p.multiply_opacity(1.0 - 0.55 * k);
         self.paint_group(&p, g, r, self.s.pill_meters);
         let resp = ui.interact(r, Id::new(("meter", g as u8)), Sense::click_and_drag());
-        if resp.hovered() || dragged {
-            ui.ctx().set_cursor_icon(if dragged { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
-        }
         if resp.drag_started_by(egui::PointerButton::Primary) {
             let px = resp.interact_pointer_pos().map(|p| p.x).unwrap_or(r.left());
             self.meter_drag = Some(MeterDrag { group: g, grab: px - r.left(), w: r.width(), y: r.top() });
@@ -1557,31 +1623,37 @@ impl App {
         }
     }
 
+    /// Card title / index size (13px at Medium, scaled with the bar).
+    fn title_size(&self) -> f32 {
+        (13.0 * self.k()).round()
+    }
+
     /// Natural card width: contentRow (index 14 | kind 28 | title ≤130 | link 16, spacing 4) + 23.
     fn card_w_raw(&self, i: usize) -> f32 {
         let c = &self.cards[i];
-        let small = self.s.bar_size == "Small";
-        let tw = self.title_w.get(&(c.title.clone(), small)).copied().unwrap_or(c.title.chars().count() as f32 * 6.5);
-        let mut parts = vec![14.0];
+        let k = self.k();
+        let key = (c.title.clone(), (self.title_size() * 10.0) as u32);
+        let tw = self.title_w.get(&key).copied().unwrap_or(c.title.chars().count() as f32 * 6.5 * k);
+        let mut parts = vec![14.0 * k];
         if c.kind != Kind::Text {
-            parts.push(28.0);
+            parts.push(28.0 * k);
         }
-        parts.push(tw.min(130.0));
+        parts.push(tw.min(130.0 * k));
         if c.kind == Kind::Url {
-            parts.push(16.0);
+            parts.push(16.0 * k);
         }
-        let row: f32 = parts.iter().sum::<f32>() + 4.0 * (parts.len() - 1) as f32;
-        (row + 23.0).clamp(52.0, 200.0)
+        let row: f32 = parts.iter().sum::<f32>() + 4.0 * k * (parts.len() - 1) as f32;
+        (row + 23.0 * k).clamp(52.0 * k, 200.0 * k)
     }
 
     fn card_w(&mut self, ctx: &egui::Context, i: usize) -> f32 {
         if let Some(w) = self.cards[i].locked_w {
             return w;
         }
-        let small = self.s.bar_size == "Small";
-        let key = (self.cards[i].title.clone(), small);
+        let ts = self.title_size();
+        let key = (self.cards[i].title.clone(), (ts * 10.0) as u32);
         if !self.title_w.contains_key(&key) {
-            let w = text_w(ctx, &key.0, fid(if small { 11.0 } else { 13.0 }, ""));
+            let w = text_w(ctx, &key.0, fid(ts, ""));
             self.title_w.insert(key, w);
         }
         self.card_w_raw(i)
@@ -1593,14 +1665,17 @@ impl App {
         let q = self.search_text.clone();
         let vis: Vec<usize> = (0..self.cards.len()).filter(|&i| self.cards[i].matches(&q) || self.cards[i].removing.is_some()).collect();
         let widths: Vec<f32> = vis.iter().map(|&i| self.card_w(&ctx, i)).collect();
-        let items_w: f32 = widths.iter().sum::<f32>() + 6.0 * (widths.len().saturating_sub(1)) as f32;
+        let kk = self.k();
+        let gap = 6.0 * kk;
+        let items_w: f32 = widths.iter().sum::<f32>() + gap * (widths.len().saturating_sub(1)) as f32;
         let w = area.width();
+        let (pad_min, foot) = (12.0 * kk, 20.0 * kk);
         let pad = match self.s.alignment.as_str() {
-            "Left" => 12.0,
-            "Right" => (w - items_w - 20.0).max(12.0),
-            _ => ((w - items_w - 20.0) / 2.0).max(12.0),
+            "Left" => pad_min,
+            "Right" => (w - items_w - foot).max(pad_min),
+            _ => ((w - items_w - foot) / 2.0).max(pad_min),
         };
-        let content = pad + items_w + 20.0;
+        let content = pad + items_w + foot;
         self.max_scroll = (content - w).max(0.0);
 
         // Wheel / touchpad scrolls the shelf sideways.
@@ -1658,7 +1733,7 @@ impl App {
             if let Some(t) = c.removing {
                 opacity *= 1.0 - ((now - t) / 0.16).clamp(0.0, 1.0) as f32;
             }
-            cx += cw + 6.0;
+            cx += cw + gap;
             let rect = Rect::from_min_size(pos2(x, cy - ch / 2.0), vec2(cw, ch));
             if rect.right() < area.left() - 40.0 || rect.left() > area.right() + 40.0 {
                 continue;
@@ -1671,14 +1746,18 @@ impl App {
                 let far = ctx.input(|i| i.pointer.press_origin().zip(i.pointer.latest_pos()).map(|(a, b)| a.distance(b) > 16.0).unwrap_or(false));
                 // Only the card the press actually started on may drag.
                 let on_me = ctx.input(|i| i.pointer.press_origin()).map(|o| hit.contains(o)).unwrap_or(false);
-                if far && on_me && !winsys::shift_down() && !winsys::ctrl_down() {
+                // The OLE loop eats the mouse-up, so egui can still think the
+                // button is held afterwards — check the physical button or every
+                // frame would start (and instantly cancel) a new drag.
+                let held = winsys::key_down(0x01); // VK_LBUTTON
+                if far && on_me && held && !winsys::shift_down() && !winsys::ctrl_down() {
                     self.drag_out = Some(id);
                 }
             }
             let removing = c.removing.is_some();
             let mut open_hover = false;
             if c.kind == Kind::Url && c.flash.is_none() {
-                let gr = Rect::from_center_size(pos2(rect.right() - 18.0, cy), vec2(24.0, 22.0));
+                let gr = Rect::from_center_size(pos2(rect.right() - 18.0 * kk, cy), vec2(24.0, 22.0) * kk);
                 open_hover = ui.rect_contains_pointer(gr.intersect(area));
                 if open_hover {
                     ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -1790,44 +1869,44 @@ impl App {
 
         // Content row: margins L9 / R10, spacing 4, one shared centerline.
         let cy = rect.center().y;
-        let small = self.s.bar_size == "Small";
-        let mut x = rect.left() + 9.0;
+        let k = self.k();
+        let isz = self.title_size();
+        let mut x = rect.left() + 9.0 * k;
         let flashing = c.flash.as_ref().map(|f| f.0.clone());
         // While a status shows ("Dropped!", "Pasted!"…) it owns the whole card:
         // number and icon step aside so the message sits dead-center.
         if flashing.is_none() {
-            let ig = ctx.fonts_mut(|f| f.layout_no_wrap(c.pos.to_string(), fid(if small { 12.0 } else { 13.0 }, "bold"), pal.text));
-            let isz = if small { 12.0 } else { 13.0 };
+            let ig = ctx.fonts_mut(|f| f.layout_no_wrap(c.pos.to_string(), fid(isz, "bold"), pal.text));
             shapes.push(Shape::galley(pos2(x, caps_center(&ig, pos2(0.0, cy), isz).y), ig, pal.text));
         }
-        x += 14.0 + 4.0;
+        x += (14.0 + 4.0) * k;
         if c.kind != Kind::Text {
             if flashing.is_none() {
-                self.paint_kind(ctx, &mut shapes, c, Rect::from_min_size(pos2(x, rect.top()), vec2(28.0, rect.height())));
+                self.paint_kind(ctx, &mut shapes, c, Rect::from_min_size(pos2(x, rect.top()), vec2(28.0 * k, rect.height())));
             }
-            x += 28.0 + 4.0;
+            x += (28.0 + 4.0) * k;
         }
-        let right = rect.right() - 10.0 - if c.kind == Kind::Url && flashing.is_none() { 20.0 } else { 0.0 };
-        let tsize = if small { 11.0 } else { 13.0 };
+        let right = rect.right() - 10.0 * k - if c.kind == Kind::Url && flashing.is_none() { 20.0 * k } else { 0.0 };
+        let tsize = isz;
         match &flashing {
             Some(t) => {
                 // Status: bold, centered on the whole card (both axes).
-                let g = elide(ctx, t, fid(tsize, "bold"), pal.text, rect.width() - 16.0);
+                let g = elide(ctx, t, fid(tsize, "bold"), pal.text, rect.width() - 16.0 * k);
                 let at = caps_center(&g, rect.center(), tsize);
                 shapes.push(Shape::galley(pos2(at.x.round(), at.y), g, pal.text));
             }
             None => {
-                let g = elide(ctx, &c.title, fid(tsize, ""), pal.text, (right - x).min(130.0));
+                let g = elide(ctx, &c.title, fid(tsize, ""), pal.text, (right - x).min(130.0 * k));
                 shapes.push(Shape::galley(pos2(x, caps_center(&g, pos2(0.0, cy), tsize).y), g, pal.text));
             }
         }
         if c.kind == Kind::Url && flashing.is_none() {
-            let gc = pos2(rect.right() - 10.0 - 8.0, cy);
+            let gc = pos2(rect.right() - 18.0 * k, cy);
             if open_hover {
-                shapes.push(Shape::circle_filled(gc, 11.0, theme::alpha(pal.accent, 0.34)));
+                shapes.push(Shape::circle_filled(gc, 11.0 * k, theme::alpha(pal.accent, 0.34)));
             }
             let col = if open_hover { theme::lighter(pal.accent, 1.45) } else { pal.accent };
-            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::OPEN_LINK.to_string(), fid(15.0, "icons"), col));
+            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::OPEN_LINK.to_string(), fid(15.0 * k, "icons"), col));
             let gp = gc - g.size() / 2.0;
             if open_hover {
                 let uy = gp.y + g.size().y - 3.0;
@@ -1838,13 +1917,13 @@ impl App {
         // Badges: snippet star (left of pin when both), pin top-right.
         if c.it.is_snippet {
             let gold = theme::rgb(0xff, 0xd6, 0x59);
-            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::STAR.to_string(), fid(9.0, "icons"), gold));
-            let rx = rect.right() - if c.it.is_pinned { 14.0 } else { 2.0 };
-            shapes.push(Shape::galley(pos2(rx - g.size().x, rect.top() + 2.0), g, gold));
+            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::STAR.to_string(), fid(9.0 * k, "icons"), gold));
+            let rx = rect.right() - if c.it.is_pinned { 14.0 * k } else { 2.0 * k };
+            shapes.push(Shape::galley(pos2(rx - g.size().x, rect.top() + 2.0 * k), g, gold));
         }
         if c.it.is_pinned {
-            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::PIN.to_string(), fid(9.0, "icons"), pal.accent));
-            shapes.push(Shape::galley(pos2(rect.right() - 2.0 - g.size().x, rect.top() + 2.0), g, pal.accent));
+            let g = ctx.fonts_mut(|f| f.layout_no_wrap(icons::PIN.to_string(), fid(9.0 * k, "icons"), pal.accent));
+            shapes.push(Shape::galley(pos2(rect.right() - 2.0 * k - g.size().x, rect.top() + 2.0 * k), g, pal.accent));
         }
 
         if scale != 1.0 || opacity < 1.0 {
@@ -1866,19 +1945,20 @@ impl App {
     fn paint_kind(&self, ctx: &egui::Context, out: &mut Vec<Shape>, c: &Card, slot: Rect) {
         let pal = &self.pal;
         let ctr = slot.center();
+        let k = self.k();
         let glyph = |out: &mut Vec<Shape>, ch: char, size: f32, col: Color32| {
-            let g = ctx.fonts_mut(|f| f.layout_no_wrap(ch.to_string(), fid(size, "icons"), col));
+            let g = ctx.fonts_mut(|f| f.layout_no_wrap(ch.to_string(), fid(size * k, "icons"), col));
             out.push(Shape::galley(ctr - g.size() / 2.0, g, col));
         };
         let badge = |out: &mut Vec<Shape>, text: &str| {
-            let r = Rect::from_center_size(ctr, vec2(26.0, 16.0));
-            out.push(Shape::rect_stroke(r, 4, Stroke::new(1.0, pal.text), StrokeKind::Inside));
-            let g = elide(ctx, text, fid(8.0, "bold"), pal.text, 24.0);
-            out.push(Shape::galley(caps_center(&g, ctr, 8.0), g, pal.text));
+            let r = Rect::from_center_size(ctr, vec2(26.0, 16.0) * k);
+            out.push(Shape::rect_stroke(r, (4.0 * k) as u8, Stroke::new(1.0, pal.text), StrokeKind::Inside));
+            let g = elide(ctx, text, fid(8.0 * k, "bold"), pal.text, 24.0 * k);
+            out.push(Shape::galley(caps_center(&g, ctr, 8.0 * k), g, pal.text));
         };
         match c.kind {
             Kind::Image => {
-                let tile = Rect::from_center_size(ctr, vec2(26.0, (self.card_h() - 6.0).max(16.0)));
+                let tile = Rect::from_center_size(ctr, vec2(26.0 * k, (self.card_h() - 6.0 * k).max(16.0)));
                 match self.thumbs.get(&c.it.id) {
                     Some(tex) => {
                         match self.s.thumb_style.as_str() {
@@ -1908,11 +1988,11 @@ impl App {
             }
             Kind::Color => {
                 let col = theme::hex_color(&c.it.text_content).unwrap_or(Color32::GRAY);
-                out.push(Shape::circle_filled(ctr, 8.0, col));
-                out.push(Shape::circle_stroke(ctr, 7.5, Stroke::new(1.0, pal.card_border)));
+                out.push(Shape::circle_filled(ctr, 8.0 * k, col));
+                out.push(Shape::circle_stroke(ctr, 8.0 * k - 0.5, Stroke::new(1.0, pal.card_border)));
             }
             Kind::Url => match self.favicons.get(&c.host).and_then(|f| f.as_ref()) {
-                Some(tex) => out.push(Shape::image(tex.id(), Rect::from_center_size(ctr, vec2(16.0, 16.0)), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE)),
+                Some(tex) => out.push(Shape::image(tex.id(), Rect::from_center_size(ctr, vec2(16.0, 16.0) * k), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE)),
                 None => glyph(out, icons::GLOBE, 16.0, pal.accent),
             },
             Kind::File => {
@@ -1921,7 +2001,7 @@ impl App {
                 } else if c.is_audio() {
                     glyph(out, icons::AUDIO, 16.0, pal.text)
                 } else if c.is_code() {
-                    out.extend(icons::meter_shapes(ctr - Meter::Code.size() / 2.0, Meter::Code, pal.text));
+                    out.extend(icons::meter_shapes(ctr - Meter::Code.size() * k / 2.0, Meter::Code, pal.text, k));
                 } else {
                     badge(out, &c.ext)
                 }

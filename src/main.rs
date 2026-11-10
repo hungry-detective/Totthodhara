@@ -88,6 +88,19 @@ fn main() {
         .with_always_on_top()
         .with_drag_and_drop(true)
         .with_icon(egui::IconData { rgba: icon.as_raw().clone(), width: icon.width(), height: icon.height() });
+    // README showcase render (see App::run_showcase): fixed off-screen canvas.
+    let viewport = match std::env::var("TOTTHODHARA_SHOWCASE").ok().and_then(|v| v.split_once(':').map(|(k, _)| k.to_string())) {
+        Some(k) => {
+            let size = match (k.as_str(), settings::Settings::load().bar_size.as_str()) {
+                ("bar", "Small") => [1366.0, 26.0],
+                ("bar", "Large") => [1366.0, 36.0],
+                ("bar", _) => [1366.0, 30.0],
+                _ => [720.0, 560.0],
+            };
+            viewport.with_inner_size(size).with_position([-6000.0, 0.0])
+        }
+        None => viewport,
+    };
     let options = eframe::NativeOptions {
         viewport,
         centered: false,

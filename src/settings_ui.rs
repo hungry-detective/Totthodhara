@@ -54,6 +54,7 @@ impl SettingsWin {
             .with_taskbar(true)
             .with_drag_and_drop(false)
             .with_icon(egui::IconData { rgba: icon.as_raw().clone(), width: icon.width(), height: icon.height() });
+        let builder = if std::env::var("TOTTHODHARA_TEST_OFFSCREEN").is_ok() { builder.with_position(egui::pos2(-4000.0, 0.0)).with_active(false) } else { builder };
         let mut keep = true;
         ctx.show_viewport_immediate(self.id, builder, |ui, _| {
             if ui.input(|i| i.viewport().close_requested()) {
@@ -61,6 +62,23 @@ impl SettingsWin {
             }
             style(ui, &app.pal);
             keep &= self.body(ui, app, now);
+            if let Ok(out) = std::env::var("TOTTHODHARA_TEST_SHOT") {
+                // Verification mode: cycle every page and log each card's rect (no screen capture).
+                static FRAMES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                let n = FRAMES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if n % 20 == 19 {
+                    let rows = TEST_ROWS.with(|r| std::mem::take(&mut *r.borrow_mut()));
+                    let mut log = std::fs::read_to_string(&out).unwrap_or_default();
+                    log.push_str(&format!("section {}
+", self.section));
+                    for (t, a, b) in rows { log.push_str(&format!("{a:.1} {b:.1} {t}
+")); }
+                    let _ = std::fs::write(&out, log);
+                    self.section = (self.section + 1) % SECTIONS.len();
+                }
+                TEST_ROWS.with(|r| r.borrow_mut().clear());
+                ui.ctx().request_repaint();
+            }
         });
         if self.hwnd.is_null() {
             self.hwnd = winsys::find_own_window(&self.title);
@@ -71,14 +89,19 @@ impl SettingsWin {
                 let (mon, _) = winsys::monitor_of_point(winsys::cursor_pos().0, winsys::cursor_pos().1);
                 let dpi = winsys::dpi_of_window(self.hwnd);
                 let (w, h) = ((720.0 * dpi) as i32, (560.0 * dpi) as i32);
-                winsys::move_window(self.hwnd, mon.l + ((mon.r - mon.l - w) / 2).max(0), mon.t + ((mon.b - mon.t - h) / 2).max(0), w, h, false);
-                winsys::force_foreground(self.hwnd);
+                if std::env::var("TOTTHODHARA_TEST_OFFSCREEN").is_ok() {
+                    // Verification mode: never appear over the user's screen.
+                    winsys::move_window(self.hwnd, -4000, 0, w, h, false);
+                } else {
+                    winsys::move_window(self.hwnd, mon.l + ((mon.r - mon.l - w) / 2).max(0), mon.t + ((mon.b - mon.t - h) / 2).max(0), w, h, false);
+                    winsys::force_foreground(self.hwnd);
+                }
             }
         }
         keep
     }
 
-    fn body(&mut self, ui: &mut Ui, app: &mut App, now: f64) -> bool {
+    pub fn body(&mut self, ui: &mut Ui, app: &mut App, now: f64) -> bool {
         let pal = app.pal.clone();
         let full = ui.max_rect();
         let p = ui.painter().clone();
@@ -455,8 +478,13 @@ impl SettingsWin {
         let focused = ui.ctx().memory(|m| m.has_focus(id));
         ui.painter().rect(r, 8, pal.card_bg, Stroke::new(if focused { 2.0 } else { 1.0 }, if focused { pal.accent } else { pal.card_border }), StrokeKind::Inside);
         let mut buf = self.spin_buf.get(key).cloned().filter(|_| focused).unwrap_or_else(|| v.to_string());
-        let resp = ui.put(
-            Rect::from_min_max(pos2(r.left() + 6.0, r.top() + 4.0), pos2(r.right() - 26.0, r.bottom() - 4.0)),
+        // Child UI: `put` on the page itself would move the page's layout
+        // cursor to this small field, so the next card started 2-4px too
+        // high and touched this one.
+        let field = Rect::from_min_max(pos2(r.left() + 6.0, r.top() + 4.0), pos2(r.right() - 26.0, r.bottom() - 4.0));
+        let mut fui = ui.new_child(egui::UiBuilder::new().max_rect(field).id_salt(("spinf", key)));
+        let resp = fui.put(
+            field,
             egui::TextEdit::singleline(&mut buf).id(id).frame(egui::Frame::NONE).font(fid(12.0, "")).text_color(pal.text).horizontal_align(egui::Align::Center).vertical_align(egui::Align::Center),
         );
         let mut changed = false;
@@ -492,7 +520,7 @@ impl SettingsWin {
 
 // ───────────────────────── widgets ─────────────────────────
 
-fn style(ui: &mut Ui, pal: &Pal) {
+pub fn style(ui: &mut Ui, pal: &Pal) {
     let s = ui.style_mut();
     s.visuals.override_text_color = Some(pal.text);
     s.visuals.selection.bg_fill = pal.accent;
@@ -536,10 +564,13 @@ fn section_label(ui: &mut Ui, pal: &Pal, t: &str) {
 }
 
 /// SettingRow: radius-10 barBg tile, 58/46 high, control right-anchored.
+thread_local! { static TEST_ROWS: std::cell::RefCell<Vec<(String, f32, f32)>> = const { std::cell::RefCell::new(Vec::new()) }; }
+
 fn setting_row(ui: &mut Ui, pal: &Pal, title: &str, sub: &str, control: impl FnOnce(&mut Ui, Rect), ctl: egui::Vec2) {
     let w = ui.available_width();
     let h = if sub.is_empty() { 46.0 } else { 58.0 };
     let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    TEST_ROWS.with(|v| v.borrow_mut().push((title.to_string(), r.top(), r.bottom())));
     let p = ui.painter().clone();
     p.rect_filled(r, 10, pal.bar_bg);
     let cr = Rect::from_min_size(pos2(r.right() - 12.0 - ctl.x, r.center().y - ctl.y / 2.0), ctl);

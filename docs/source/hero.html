@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="base.css">
+<style>
+.wall { height: 768px; }
+.brand { position: absolute; left: 0; right: 0; top: 92px; text-align: center; }
+.brand img { width: 92px; height: 92px; filter: drop-shadow(0 10px 28px rgba(96,205,255,.25)); }
+.brand h1 { font-size: 64px; margin-top: 14px; }
+.brand p { font-size: 22px; color: var(--muted); margin-top: 10px; }
+.brand p b { color: var(--ink); font-weight: 600; }
+.chips { display: flex; gap: 10px; justify-content: center; margin-top: 26px; }
+.chips span { font-size: 14px; padding: 7px 14px; border-radius: 99px; background: rgba(255,255,255,.06); border: 1px solid var(--line); color: #d6d9e4; }
+
+/* a blurred "work" window behind the shelf, for context */
+.win { position: absolute; left: 233px; top: 418px; width: 900px; height: 232px; border-radius: 14px 14px 0 0;
+  background: rgba(255,255,255,.045); border: 1px solid var(--line); border-bottom: 0; }
+.win i { position: absolute; left: 28px; height: 10px; border-radius: 5px; background: rgba(255,255,255,.08); }
+
+.callout { position: absolute; font-size: 14px; color: #dfe3ee; display: flex; align-items: center; gap: 8px; }
+.callout::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(96,205,255,.18); }
+.line { position: absolute; width: 1px; background: linear-gradient(to bottom, rgba(96,205,255,.55), rgba(96,205,255,0)); }
+
+.shelf { position: absolute; left: 0; bottom: 48px; filter: drop-shadow(0 -6px 24px rgba(0,0,0,.35)); }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; background: rgba(28,30,38,.92); border-top: 1px solid rgba(255,255,255,.06); }
+.taskbar .apps { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); display: flex; gap: 8px; }
+.taskbar .apps u { width: 32px; height: 32px; border-radius: 7px; background: rgba(255,255,255,.09); }
+.taskbar .apps u:first-child { background: rgba(96,205,255,.35); }
+.taskbar .tray { position: absolute; right: 18px; top: 9px; text-align: right; font-size: 12px; line-height: 15px; color: #e7e9f0; }
+</style></head><body>
+<div class="wall">
+  <div class="brand">
+    <img src="app.png" alt="">
+    <h1>Totthodhara</h1>
+    <p><b>Never lose a copy again.</b> A floating clipboard shelf that sits right above your taskbar.</p>
+    <div class="chips"><span>Pure Rust · egui</span><span>Portable · no installer</span><span>Auto-updates</span><span>Windows 10 / 11</span></div>
+  </div>
+  <div class="win">
+    <i style="top:28px;width:220px"></i><i style="top:58px;width:610px"></i><i style="top:80px;width:540px"></i>
+    <i style="top:102px;width:580px"></i><i style="top:138px;width:420px"></i><i style="top:160px;width:500px"></i>
+  </div>
+  <div class="line" style="left:373px;bottom:78px;height:60px"></div>
+  <div class="callout" style="left:370px;bottom:144px">Every copy becomes a card — click to paste</div>
+  <div class="line" style="left:1185px;bottom:78px;height:96px"></div>
+  <div class="callout" style="left:1182px;bottom:180px">Live network speed</div>
+  <div class="line" style="left:95px;bottom:78px;height:96px"></div>
+  <div class="callout" style="left:92px;bottom:180px">CPU · RAM · world clock</div>
+  <img class="shelf bar" src="bar_dark.png" width="1366" height="30" alt="">
+  <div class="taskbar"><div class="apps"><u></u><u></u><u></u><u></u><u></u><u></u></div><div class="tray">8:06 AM<br>11/10/2026</div></div>
+</div>
+</body></html>
