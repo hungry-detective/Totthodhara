@@ -22,6 +22,20 @@ mod winsys;
 mod worker;
 
 fn main() {
+    // Headless self-update (support / scripted): `Totthodhara.exe --update`.
+    // Checks the latest release, installs it if newer, and exits; the swap
+    // script relaunches the app. Result goes to datapp_debug.txt.
+    if std::env::args().any(|a| a == "--update") {
+        let info = update::check(false);
+        paths::log(format!("[Update] --update: current {} latest {} available {} {}", info.current_version, info.latest_version, info.is_update_available, info.error_message));
+        if info.is_update_available {
+            match update::stage_and_launch(&info) {
+                Ok(()) => paths::log("[Update] --update: staged, exiting for swap"),
+                Err(e) => paths::log(format!("[Update] --update failed: {e}")),
+            }
+        }
+        return;
+    }
     // Single instance: kill older Totthodhara/ClipDropPro processes, then mutex.
     // TOTTHODHARA_DEV=1: side-by-side testing (no kill, no mutex).
     let dev = std::env::var("TOTTHODHARA_DEV").is_ok();

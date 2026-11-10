@@ -142,10 +142,19 @@ fn fail(msg: impl Into<String>) {
 /// Download → verify → unpack → hand the swap to a script that runs after
 /// we exit. Emits Installing once the script is armed (caller then quits).
 pub fn download_and_install(info: UpdateInfo) {
-    std::thread::spawn(move || {
+    std::thread::spawn(move || match stage_and_launch(&info) {
+        Ok(()) => crate::events::send(crate::events::Event::Update(UpdateMsg::Installing)),
+        Err(e) => fail(e),
+    });
+}
+
+/// Blocking: download, verify, unpack, arm the swap script. The caller must
+/// exit promptly afterwards (the script waits for this PID).
+pub fn stage_and_launch(info: &UpdateInfo) -> Result<(), String> {
+    {
         let stage = std::env::temp_dir().join("TotthodharaUpdate").join(uuid::Uuid::new_v4().simple().to_string());
         if std::fs::create_dir_all(&stage).is_err() {
-            return fail("Could not create the update folder");
+            return Err(String::from("Could not create the update folder"));
         }
         let zip = stage.join(ASSET);
         let mut last = String::new();
@@ -163,24 +172,24 @@ pub fn download_and_install(info: UpdateInfo) {
             }
         }
         if !ok {
-            return fail(format!("Download failed: {last}"));
+            return Err(format!("Download failed: {last}"));
         }
         if !info.sha256_url.is_empty() {
             let want = match agent(30).get(&info.sha256_url).call().map_err(|e| e.to_string()).and_then(|mut r| r.body_mut().read_to_string().map_err(|e| e.to_string())) {
                 Ok(t) => t.split_whitespace().next().unwrap_or("").to_lowercase(),
-                Err(e) => return fail(format!("Could not fetch checksum: {e}")),
+                Err(e) => return Err(format!("Could not fetch checksum: {e}")),
             };
             let got = match std::fs::read(&zip) {
                 Ok(b) => hex(&Sha256::digest(&b)),
-                Err(e) => return fail(e.to_string()),
+                Err(e) => return Err(e.to_string()),
             };
             if want.len() == 64 && want != got {
-                return fail("Checksum mismatch — download discarded");
+                return Err(String::from("Checksum mismatch — download discarded"));
             }
         }
         let new_dir = stage.join("new");
         if let Err(e) = unzip(&zip, &new_dir) {
-            return fail(format!("Could not unpack: {e}"));
+            return Err(format!("Could not unpack: {e}"));
         }
         // Source = folder that contains Totthodhara.exe (root or one level down).
         let src = if new_dir.join("Totthodhara.exe").exists() {
@@ -188,7 +197,7 @@ pub fn download_and_install(info: UpdateInfo) {
         } else {
             match std::fs::read_dir(&new_dir).ok().into_iter().flatten().flatten().map(|e| e.path()).find(|p| p.join("Totthodhara.exe").exists()) {
                 Some(p) => p,
-                None => return fail("Update package is missing Totthodhara.exe"),
+                None => return Err("Update package is missing Totthodhara.exe".into()),
             }
         };
         let exe = std::env::current_exe().unwrap_or_default();
@@ -196,20 +205,32 @@ pub fn download_and_install(info: UpdateInfo) {
         let script = stage.join("apply.ps1");
         let body = apply_script(std::process::id(), &src, &root, &exe);
         if std::fs::write(&script, body).is_err() {
-            return fail("Could not write the update script");
+            return Err(String::from("Could not write the update script"));
         }
+        // Hidden console (CREATE_NO_WINDOW). NOT DETACHED_PROCESS: a console-less
+        // PowerShell dies silently before running a line (verified). Break away
+        // from any job object so the script outlives this process; fall back
+        // when the job forbids breakaway.
         use std::os::windows::process::CommandExt;
-        let spawned = std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File"])
-            .arg(&script)
-            .creation_flags(0x0800_0000 | 0x0000_0008) // CREATE_NO_WINDOW | DETACHED_PROCESS
-            .spawn();
+        let spawn = |flags: u32| {
+            std::process::Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+                .arg(&script)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .creation_flags(flags)
+                .spawn()
+        };
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+        let spawned = spawn(CREATE_NO_WINDOW | CREATE_BREAKAWAY_FROM_JOB).or_else(|_| spawn(CREATE_NO_WINDOW));
         if let Err(e) = spawned {
-            return fail(format!("Could not start the installer: {e}"));
+            return Err(format!("Could not start the installer: {e}"));
         }
         crate::paths::log(format!("[Update] staged v{} from {}", info.latest_version, src.display()));
-        crate::events::send(crate::events::Event::Update(UpdateMsg::Installing));
-    });
+        Ok(())
+    }
 }
 
 fn hex(b: &[u8]) -> String {
