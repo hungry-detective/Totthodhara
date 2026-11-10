@@ -20,11 +20,6 @@ $stage = Join-Path $dist "Totthodhara"
 if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item "target\release\Totthodhara.exe" $stage
-# Migration shim: Qt-edition installs (v0.x) only accept a package that has
-# BOTH <root>\Totthodhara.exe and <root>\library\Totthodhara.exe. Shipping a
-# real copy here lets those users auto-upgrade straight to this build.
-New-Item -ItemType Directory -Path (Join-Path $stage "library") | Out-Null
-Copy-Item "target\release\Totthodhara.exe" (Join-Path $stage "library")
 @"
 Totthodhara v$version — portable
 

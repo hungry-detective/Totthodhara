@@ -1,6 +1,6 @@
 [package]
 name = "totthodhara"
-version = "2.0.0"
+version = "2.0.1"
 edition = "2021"
 description = "Totthodhara - floating clipboard shelf (Rust + egui port)"
 build = "build.rs"

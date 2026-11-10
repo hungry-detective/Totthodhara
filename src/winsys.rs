@@ -401,85 +401,135 @@ pub fn subclass_root(h: Hwnd) {
 
 pub struct FullscreenDetector {
     pub hidden: bool,
-    last_pid: u32,
-    last_time: std::time::Instant,
+    clear_since: Option<std::time::Instant>,
+    /// The window that went fullscreen + its process.
+    fs_hwnd: isize,
+    fs_pid: u32,
 }
 
 impl Default for FullscreenDetector {
     fn default() -> Self {
-        Self { hidden: false, last_pid: 0, last_time: std::time::Instant::now() }
+        Self { hidden: false, clear_since: None, fs_hwnd: 0, fs_pid: 0 }
     }
 }
 
-impl FullscreenDetector {
-    /// One tick of FullScreenCheckTimer_Tick. Returns Some(hide) on a change.
-    pub fn tick(&mut self, shelf: Hwnd, menu_open: bool) -> Option<bool> {
-        unsafe {
-            if menu_open {
-                return None;
+/// Does `h` still exist, visible, not minimized, covering its monitor?
+unsafe fn still_fullscreen(h: HWND) -> bool {
+    if !IsWindow(Some(h)).as_bool() || !IsWindowVisible(h).as_bool() || IsIconic(h).as_bool() {
+        return false;
+    }
+    let mut r = RECT::default();
+    if GetWindowRect(h, &mut r).is_err() {
+        return false;
+    }
+    let (mon, _) = monitor_info(MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST));
+    let (mw, mh) = ((mon.r - mon.l) as f32, (mon.b - mon.t) as f32);
+    (r.right - r.left) as f32 >= mw * 0.95 && (r.bottom - r.top) as f32 >= mh * 0.95
+}
+
+/// Is the foreground window a fullscreen app on the shelf's monitor?
+/// `None` = can't tell this tick (our own popup / no foreground) → keep state.
+/// Returns (fullscreen?, foreground hwnd, its pid).
+unsafe fn foreground_is_fullscreen(shelf: Hwnd) -> Option<(bool, isize, u32)> {
+    let r = foreground_check(shelf)?;
+    let fg = GetForegroundWindow();
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(fg, Some(&mut pid));
+    Some((r, fg.0 as isize, pid))
+}
+
+unsafe fn foreground_check(shelf: Hwnd) -> Option<bool> {
+    let fg = GetForegroundWindow();
+    if fg.0.is_null() {
+        return None;
+    }
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(fg, Some(&mut pid));
+    if fg.0 as isize == shelf.0 || pid == own_pid() {
+        return None;
+    }
+    let mut cls = [0u16; 256];
+    let n = GetClassNameW(fg, &mut cls) as usize;
+    let c = String::from_utf16_lossy(&cls[..n]);
+    if c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd" || c == "WorkerW" || c == "Progman" {
+        return Some(false);
+    }
+    // Only a fullscreen app on OUR monitor hides the shelf.
+    let fm = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+    if fm != MonitorFromWindow(shelf.h(), MONITOR_DEFAULTTONEAREST) {
+        return Some(false);
+    }
+    let mut r = RECT::default();
+    if GetWindowRect(fg, &mut r).is_err() {
+        return None;
+    }
+    let (mon, _) = monitor_info(fm);
+    let (mw, mh) = ((mon.r - mon.l) as f32, (mon.b - mon.t) as f32);
+    let (ww, wh) = ((r.right - r.left) as f32, (r.bottom - r.top) as f32);
+    let style = GetWindowLongW(fg, GWL_STYLE) as u32;
+    let caption = style & 0x00C0_0000 == 0x00C0_0000; // WS_CAPTION
+    let thick = style & 0x0004_0000 != 0; // WS_THICKFRAME
+    let covers = r.left <= mon.l + 1 && r.top <= mon.t + 1 && r.right >= mon.r - 1 && r.bottom >= mon.b - 1;
+    let big = ww >= mw * 0.95 && wh >= mh * 0.95;
+    // A normal captioned + resizable window (maximized with an auto-hide
+    // taskbar can cover the monitor too) is never "fullscreen".
+    let normal_window = caption && thick;
+    // 1) Covers the whole monitor and isn't a normal window (F11 browsers,
+    //    fullscreen video players, borderless games).
+    if covers && !normal_window {
+        return Some(true);
+    }
+    // 2) Qt rule: borderless and ≥95% of the monitor.
+    if !caption && !thick && big {
+        return Some(true);
+    }
+    // 3) Shell's own verdict (what the taskbar uses): busy fullscreen app,
+    //    exclusive D3D, or presentation mode — with a monitor-sized window.
+    if big {
+        if let Ok(q) = SHQueryUserNotificationState() {
+            if q == QUNS_BUSY || q == QUNS_RUNNING_D3D_FULL_SCREEN || q == QUNS_PRESENTATION_MODE {
+                return Some(true);
             }
-            let fg = GetForegroundWindow();
-            if fg.0.is_null() || fg.0 as isize == shelf.0 {
-                return None;
-            }
-            let mut pid = 0u32;
-            GetWindowThreadProcessId(fg, Some(&mut pid));
-            if pid == own_pid() {
-                return None;
-            }
-            let mut cls = [0u16; 256];
-            let n = GetClassNameW(fg, &mut cls) as usize;
-            let c = String::from_utf16_lossy(&cls[..n]);
-            if c == "Shell_TrayWnd" || c == "WorkerW" || c == "Progman" {
-                if self.hidden {
-                    self.hidden = false;
-                    return Some(false);
-                }
-                return None;
-            }
-            let mut r = RECT::default();
-            if GetWindowRect(fg, &mut r).is_err() {
-                return None;
-            }
-            let m = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-            let (mon, _) = monitor_info(m);
-            let mon_w = mon.r - mon.l;
-            let mon_h = mon.b - mon.t;
-            let win_w = r.right - r.left;
-            let win_h = r.bottom - r.top;
-            let style = GetWindowLongW(fg, GWL_STYLE) as u32;
-            let has_caption = style & 0x00C0_0000 == 0x00C0_0000;
-            let mut fs = !has_caption
-                && ((r.left <= mon.l + 1 && r.top <= mon.t + 1 && r.right >= mon.r - 1 && r.bottom >= mon.b - 1)
-                    || (win_w as f32 >= mon_w as f32 * 0.95 && win_h as f32 >= mon_h as f32 * 0.95));
-            if !fs && !has_caption {
-                fs = win_w as f32 >= mon_w as f32 * 0.98 && win_h as f32 >= mon_h as f32 * 0.98;
-            }
-            if fs {
-                if !self.hidden {
-                    self.hidden = true;
-                    self.last_pid = pid;
-                    return Some(true);
-                }
-            } else if self.hidden {
-                if pid == self.last_pid {
-                    let cap = style & 0x00C0_0000 != 0;
-                    let thick = style & 0x0004_0000 != 0;
-                    if (cap && thick) || (win_w as f32) < mon_w as f32 * 0.5 {
-                        self.hidden = false;
-                        self.last_pid = 0;
-                        return Some(false);
-                    } else {
-                        self.last_time = std::time::Instant::now();
-                    }
-                } else if self.last_time.elapsed().as_secs_f32() > 2.0 {
-                    self.hidden = false;
-                    self.last_pid = 0;
-                    return Some(false);
-                }
-            }
-            None
         }
+    }
+    Some(false)
+}
+
+impl FullscreenDetector {
+    /// One timer tick. Returns Some(hide) when the state flips. Hides
+    /// instantly; shows again only after 400ms of continuous non-fullscreen,
+    /// so seeking / OSD overlays in a fullscreen video never flash the shelf.
+    pub fn tick(&mut self, shelf: Hwnd, menu_open: bool) -> Option<bool> {
+        if menu_open {
+            return None;
+        }
+        let (fs, fg, pid) = unsafe { foreground_is_fullscreen(shelf) }?;
+        if fs {
+            self.clear_since = None;
+            self.fs_hwnd = fg;
+            self.fs_pid = pid;
+            if !self.hidden {
+                self.hidden = true;
+                return Some(true);
+            }
+            return None;
+        }
+        if !self.hidden {
+            return None;
+        }
+        // Seek bars / OSD / player controls from the SAME app take focus for a
+        // moment while the video window stays fullscreen behind them: stay hidden.
+        if pid == self.fs_pid && unsafe { still_fullscreen(HWND(self.fs_hwnd as *mut c_void)) } {
+            self.clear_since = None;
+            return None;
+        }
+        let since = *self.clear_since.get_or_insert_with(std::time::Instant::now);
+        if since.elapsed() >= std::time::Duration::from_millis(400) {
+            self.hidden = false;
+            self.clear_since = None;
+            return Some(false);
+        }
+        None
     }
 }
 

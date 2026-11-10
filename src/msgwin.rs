@@ -248,7 +248,7 @@ pub fn start(hotkey: &str, mods: i32) {
                 MOUSE_HOOK = hk.0 as isize;
             }
             FS = Some(Default::default());
-            SetTimer(Some(h), TIMER_FS, 50, None);
+            SetTimer(Some(h), TIMER_FS, 100, None);
             crate::paths::log("[MsgWin] ready (clipboard, hotkey, tray, hook)");
 
             let mut msg = MSG::default();
